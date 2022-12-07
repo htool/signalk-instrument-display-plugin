@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
+  <meta content="IE=11.0000" http-equiv="X-UA-Compatible">
+  <meta charset="utf-8">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>SignalK instrument display</title>
+  <script type='text/javascript' src='/jquery/dist/jquery.min.js'></script>
+  <link rel="stylesheet" id="layout" href="javascript:;">
+  <link rel="stylesheet" id="style" href="javascript:;">
+  <style>
+  .prevent-select {
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10 and IE 11 */
+    user-select: none; /* Standard syntax */
+    background: black;
+  }
+  </style>
+</head>
+<body style="background: black;">
+  <div class="fadeScreen" id="fadeScreen" style="touch-action: none;">
+  <div class="display prevent-select" id="display"></div>
+  </div>
+</body>
+</html>
+
+<script>
+const fadeScreen = document.querySelector('#fadeScreen');
+fadeScreen.style.opacity='0'
+fadeScreen.style.transition='opacity 0.5s';
+
+// Set the global configs to synchronous
+$.ajaxSetup({
+    async: false
+});
+
+const urlParams = new URLSearchParams(window.location.search);
+
+var connected = false
+var reconnectTimer
+var instantReconnect = false
+var ws
+var wsNr = 0
+
+var nrBoxes = 0
+var menuMode = false
+var settingsMode = false
+var currentDisplayNr = 0
+var currentPageNr = 0
+
+var xDown
+var yMouseDown
+var xTouchDown
+var yTouchDown
+
+var options = {}
+
+var valuesObj = {}
+var boxesObj
+var boxObjects = {} // Quick elements lookup by path
+
+var dayNight
+var layoutLoaded = false
+
+var layout
+var display
+
+function toggleSettings () {
+  settingsMode = !settingsMode
+  console.log('Settingsmode to ', settingsMode)
+}
+
+function connect () {
+  if (connected || wsNr >= 1) {
+    return
+  };
+  ws = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host + "/signalk/v1/stream?subscribe=none");
+	ws.onopen = function() {
+    wsNr++;
+	  connected = true;
+    clearInterval(reconnectTimer)
+    
+    if (typeof options.displays == 'undefined') {
+      readOptions();
+    } else {
+      console.log('Options: %s', JSON.stringify(options))
+    }
+
+    // Start listening for value updates
+    startListeners();
+
+    ws.onmessage = function(event) {
+      if (event.data.includes('signalk-server')) {
+        welcomeMessage = event.data;
+        console.log("Skipping welcome message: " + welcomeMessage)
+      } else {
+        if (menuMode == false) {
+          handleData(JSON.parse(event.data));
+        }
+      }
+    }
+
+	  ws.onclose = function() {
+	    connected = false;
+      wsNr--;
+	    console.log("WebSocket closed - wsNr: " + wsNr);
+      if (instantReconnect) {
+        instantReconnect = false;
+        connect();
+      } else {
+        reconnectTimer = setInterval(function() {
+          if (connected == false) {
+            connect();
+          } 
+        }, 1000);
+      }
+	  }
+
+	  ws.onerror = function(err) {
+	    console.log("WebSocket connection error: " + err.message + " - closing connection");
+      ws.close();
+	  }
+    
+  }
+}
+
+// Connect websockets
+connect();
+
+function showMenuItems () {
+  menuMode = true
+  document.getElementById('layout').href=''
+  var menu = '<div class="menuLogo" id="menuLogo"><img src="' + options.style + '_logo.png"></div>'
+  for (var displayNr in Object.values(options.displays)) {
+    var display = options.displays[displayNr].name
+    console.log('display: ', JSON.stringify(display))
+    menu = menu + '<div class="menuItem" onclick="onClickDisplay(\'' + displayNr + '\')">' + display.toUpperCase() + '</div>'
+    document.getElementById('display').innerHTML = menu
+  }
+  layoutLoaded = true
+}
+
+
+function getBoxObjBySourceNr (nr) {
+  if (nr == -1) {
+    var emptyObj = {displayType: 'empty'}
+    return emptyObj
+  } else {
+    return options.sources[nr]
+  }
+}
+
+function readOptions () {
+  $.getJSON("/plugins/signalk-instrument-display-plugin/options", function(result) {
+    console.log('Loaded options: ', JSON.stringify(result))
+    jQuery.extend(options, result)
+    changeCSS("styles/" + options.style + ".css?ver=" + Math.floor(Math.random() * 1000), 'style')
+  });
+  
+  console.log('options: ', options)
+}
+
+function ReadUrlParams () {
+  if (urlParams.get('settingsMode') != null) {
+    
+    if (urlParams.get('settingsMode') == 'true') {
+      settingsMode = true
+    } else {
+      settingsMode = false
+    }
+  }
+
+  // device selection
+  display = urlParams.get('display')
+  if (display == null) {
+    showMenuItems()
+  } else {
+    for (var nr in options.displays) {
+      if (options.displays[nr].name == display) {
+        currentDisplayNr = nr
+        console.log('Set currentDisplayNr to %d (%s)', nr, display)
+      }
+      // page selection
+      if (urlParams.get('page') == null) {
+        currentPageNr = 0
+      } else {
+        currentPageNr = urlParams.get('page') - 1
+      }
+      console.log('page: ', currentPageNr)
+
+      // Load layout
+      setLayout(currentDisplayNr, currentPageNr)
+    }
+  }
+}
+
+
+function setLayout (currentDisplayNr, currentPageNr) {
+  boxObjects = {}
+  var newLayout = options.displays[currentDisplayNr].pages[currentPageNr].layout
+  changeCSS("layouts/" + newLayout + ".css?ver=" + Math.floor(Math.random() * 1000), 'layout')
+}
+
+function startListeners () {
+  var paths = [{"path": 'environment.mode'}]
+  for (const value of Object.values(options.sources)) {
+    paths.push({"path": value.path})
+  }
+
+  var subscriptionObject = {
+    "context": "vessels.self",
+    "subscribe": paths
+  }
+
+  var subscriptionMessage = JSON.stringify(subscriptionObject);
+  console.log("subscriptionMessage: " + subscriptionMessage);
+  ws.send(subscriptionMessage);
+}
+
+function setBoxes () {
+  // Read sources for boxes
+  var pagesObj = {pages: {}}
+  var sourcesObj = []
+  // console.log('currentDisplayNr: %d  currentPageNr: %d', currentDisplayNr, currentPageNr)
+  // console.log('options.displays[currentDisplayNr].pages[currentPageNr]', JSON.stringify(options.displays[currentDisplayNr].pages[currentPageNr]))
+  if (typeof options.displays[currentDisplayNr].pages[currentPageNr].sources == 'undefined') {
+    options.displays[currentDisplayNr].pages[currentPageNr].sources = []
+  }
+  for (let i = 0; i<nrBoxes ; i++) {
+    if (typeof options.displays[currentDisplayNr].pages[currentPageNr].sources[i] != 'undefined') {
+      sourcesObj.push(options.displays[currentDisplayNr].pages[currentPageNr].sources[i])
+    } else {
+      sourcesObj.push({'source': -1})
+    }
+  }
+
+  // console.log('setBoxes (sources): %s', JSON.stringify(sourcesObj))
+  for (const boxNr of Object.keys(sourcesObj)) {
+    var sourceNr = sourcesObj[boxNr].source
+    console.log('Running setBox (box_%d, source_nr %d)', boxNr, sourceNr)
+    setBox(boxNr, sourceNr)
+
+  }
+  // console.log('setBoxes: options: %s', JSON.stringify(options))
+}
+
+function getSourceNrbyBoxNr (nr) {
+  var type = typeof options.displays[currentDisplayNr].pages[currentPageNr].sources[nr]
+  if (type == 'undefined' || type == 'null') {
+    return -1
+  } else {
+    return options.displays[currentDisplayNr].pages[currentPageNr].sources[nr].source
+  }
+}
+
+
+function onClickBox (boxNr) {
+  console.log('onClickBox for BoxNr %d', boxNr)
+  if (settingsMode == true) {
+	  var sourceNr = getSourceNrbyBoxNr(boxNr)
+	  var sourcesLength = options.sources.length
+	  console.log('sourcesLength: %d', sourcesLength)
+	  if (sourceNr+1 > (sourcesLength-1)) {
+	    newSourceNr = -1
+	  } else {
+	    newSourceNr = sourceNr+1
+	  }
+	  if (sourceNr >= 0) {
+	    var currentPath = options.sources[sourceNr].path
+	    console.log('Onclick: new source %d for boxNr %d (currentPath: %s)', newSourceNr, boxNr, currentPath)
+	    options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr].source = newSourceNr
+	    console.log('Sources: %s', JSON.stringify(options.displays[currentDisplayNr].pages[currentPageNr].sources))
+	    // Remove current entry
+	    if (typeof options.sources[sourceNr] != 'undefined') {
+	      console.log('options.sources[sourceNr]: ', JSON.stringify(options.sources[sourceNr]))
+	      if (boxObjects[currentPath].length > 0) {
+	        newBoxObj = []
+	        boxObjects[currentPath].forEach (tmpBox => {
+	          if (tmpBox.layoutBoxNr != boxNr) {
+	            newBoxObj.push(tmpBox)
+	          }
+	        });
+	        boxObjects[currentPath] = newBoxObj
+	      }
+	    }
+    }
+	
+	  // Add new entry
+	  // console.log('onClick: options.sources: %s', JSON.stringify(options.sources))
+	  console.log('onClick: BEFORE boxObjects: %s', JSON.stringify(boxObjects))
+	  var newSourceObj = {}
+	  if (newSourceNr == -1) {
+	    newSourceObj = {displayType: 'empty'}
+	  } else {
+	    newSourceObj = JSON.parse(JSON.stringify(options.sources[newSourceNr]))
+	  }
+	  console.log('onClick: new layoutBoxnr: %d  newSourceNr: %d  newSourceObj: %s', boxNr, newSourceNr, JSON.stringify(newSourceObj))
+	  newSourceObj.layoutBoxNr = boxNr
+	  options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr] = newSourceNr
+	  if (typeof boxObjects[newSourceObj.path] == 'undefined') {
+	    boxObjects[newSourceObj.path] = []
+	  }
+	  boxObjects[newSourceObj.path].push(newSourceObj)
+	  console.log('onClick: AFTER boxObjects: %s', JSON.stringify(boxObjects))
+	  options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr] = {'source': newSourceNr}
+	  setBox(boxNr, newSourceNr)
+	  saveOptions()
+  } else {
+    console.log('Ignoring mouse click')
+  }
+}
+
+function onClickDisplay (nr) {
+  currentDisplayNr = nr
+  currentPageNr = 0
+  console.log('onClickDisplay: currentDisplayNr: %d  currentPageNr: %d', currentDisplayNr, currentPageNr)
+  layoutLoaded = false
+  changeLayout(currentDisplayNr)
+  menuMode == false
+}
+
+function setBox (nr, sourceNr) {
+  // Add classes to box
+  var box = "box_" + nr
+  // console.log('box: %s sourceNr: %d', box, sourceNr)
+  var boxObject = getBoxObjBySourceNr(sourceNr)
+  console.log('setBox: boxObject: %s', JSON.stringify(boxObject))
+
+  var elementClasses = ''
+  try {
+  switch (boxObject.displayType) {
+    case 'empty':
+      elementClasses = '<div class="value" id=value">-</div>'
+      break
+    case 'number':
+      elementClasses =
+        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
+        '<div class="value"><div id="value_' + nr + '"/></div></div>' +
+        '<div class="unit"><div id="unit_' + nr + '"/></div></div>'
+      break
+    case 'navigationArrow':
+      elementClasses =
+        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
+        '<div class="value"><div id="value_' + nr + '"/></div></div>' +
+        '<div class="unit"><div id="unit_' + nr + '"/></div></div>'
+      break
+    case 'vhfPOI':
+      elementClasses =
+        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
+        '<div class="unit"><div id="unit_' + nr + '"/></div></div>' +
+        '<div class="vhfChannel"><div id="vhfChannel_' + nr + '"></div></div>' +
+        '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
+      break
+    case 'vhfSector':
+      elementClasses =
+        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
+        '<div class="unit"><div id="unit_' + nr + '"/></div></div>' +
+        '<div class="vhfChannel"><div id="vhfChannel_' + nr + '"></div></div>' +
+        '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
+      break
+  }
+  var boxDoc = document.getElementById(box)
+  if (boxDoc != null) {
+    boxDoc.innerHTML = elementClasses
+    layoutLoaded = true
+  } else {
+    console.log('Cannot load box %s', box)
+  }
+
+  // Set static info in classes
+  if (layoutLoaded == true) {
+    var key = document.getElementById("key_" + nr)
+    if (key != null) {
+      document.getElementById("key_" + nr).innerHTML = boxObject.key
+    }
+    var unit = document.getElementById("unit_" + nr)
+    if (unit != null) {
+      unit.innerHTML = boxObject.unit
+    }
+
+    // Setup lookup object
+    if (sourceNr != -1) {  // empty box
+      var path = options.sources[sourceNr].path
+      if (typeof boxObjects[path] == 'undefined') {
+        boxObjects[path] = []
+      }
+      console.log('Adding boxObjects[%s]', path)
+      boxObjects[path].push(JSON.parse(JSON.stringify(options.sources[sourceNr])))
+      console.log('setBox: boxObjects: %s', JSON.stringify(boxObjects))
+      console.log('setBox: boxObjects[-1]: %s', JSON.stringify(boxObjects[path][boxObjects[path].length-1]))
+      boxObjects[path][boxObjects[path].length-1].layoutBoxNr = nr
+    }
+
+    // Temp placeholder
+    switch (boxObject.displayType) {
+    case 'vhfSector':
+    if (document.getElementById("vhfChannel_" + nr) != null) {
+      document.getElementById("vhfChannel_" + nr).innerHTML = "61"
+      document.getElementById("vhfChannelName_" + nr).innerHTML = "Haven IJmuiden"
+    }
+    break
+    case 'vhfPOI':
+    if (document.getElementById("vhfChannel_" + nr) != null) {
+      document.getElementById("vhfChannel_" + nr).innerHTML = "73"
+      document.getElementById("vhfChannelName_" + nr).innerHTML = "Seaport"
+    }
+    break
+    }
+  }
+  } catch (reason) {
+    console.log(reason)
+  }
+}
+
+function saveOptions () {
+  console.log('saveOptions: options: %s', JSON.stringify(options))
+  $.ajax({
+    type: "POST",
+    url: "/plugins/signalk-instrument-display-plugin/saveOptions",
+    contentType: 'application/json',
+    async: false,
+    data: JSON.stringify(options),
+    dataType: 'json',
+    success: function(data) {
+      console.log('saveOptions ok');
+    },
+    failure: function(errMsg) {
+      console.log('saveOptions failed: ', errMsg);
+    }
+  });
+}
+
+
+function handleData (data) {
+  // console.log(JSON.stringify(data))
+  var path = data.updates[0].values[0].path
+
+  if (layoutLoaded == false) {
+    var sourcesObject = options.displays[currentDisplayNr].pages[currentPageNr].sources
+    setBoxes()
+  }
+
+  if (path != "environment.mode") {
+    // console.log('handle_data path: ', path)
+    // console.log('boxObjects: ', JSON.stringify(boxObjects))
+    if (typeof boxObjects[path] != 'undefined') {
+    boxObjects[path].forEach (box => {
+    if (typeof box != 'undefined') {
+
+	    // console.log('handle_data box: ', box)
+	    var value = data.updates[0].values[0].value.toFixed(box.decimals)
+	    var valueString = value
+	    if (box.decimals > 0) {
+	      valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
+	    }
+	    if (typeof box.displayType != "undefined" && box.layoutBoxNr != null) {
+	      // console.log("HandleData: path: %s  boxNr: %d  value: %s", path, box.layoutBoxNr, value)
+	      switch (box.displayType) {
+	        case "navigationArrow":
+	          var arrowColor = "green"
+	          var fontSize = 80
+	          if (value < 0) {
+	            arrowColor = "red"
+	          }
+	          if (Math.abs(value) >= 100) {
+	            fontSize = 60
+	          } 
+	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + value + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (value-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
+	          break
+	        case "number":
+	          // console.log('box: ', box)
+	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+	          break
+	        default:
+	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+	          break
+	      }
+	    }
+    }
+    })
+    }
+  } else {
+    dayNight = data.updates[0].values[0].value
+    console.log('dayNight changed to %s', dayNight)
+    if (dayNight == 'night') {
+      var docElement = document.body
+      docElement.classList.add("nightMode")
+    } else {
+      var docElement = document.body
+      docElement.classList.remove("nightMode")
+    } 
+  }
+}
+
+async function changeCSS(cssFile, id) {
+  console.log('changeCSS: ', cssFile, id)
+  document.getElementById(id).href=cssFile
+  if (id == 'layout') {
+    await sleep(100)
+    nrBoxes = getComputedStyle(document.body).getPropertyValue('--numberOfBoxes');
+    console.log('numberOfBoxes: ', nrBoxes)
+    drawBoxes()
+  }
+}
+
+function drawBoxes () {
+  console.log('Drawing %d boxes', nrBoxes)
+  var tmpDisplay = ''
+  for (let i=0; i<nrBoxes; i++) {
+    tmpDisplay = tmpDisplay + '<div class="box_' + i + '" id="box_' + i + '" onclick="onClickBox(' + i + ')"></div>'
+  }
+  document.getElementById('display').innerHTML = tmpDisplay;
+}
+
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function swipe (xUp, yUp) {
+  if ((xDown - xUp) > 200) {
+    console.log('Slide right!')
+    currentPageNr = currentPageNr - 1
+    if (currentPageNr < 0) {
+      currentPageNr = options.displays[currentDisplayNr].pages.length - 1
+    }
+    changeLayout(currentPageNr)
+  } else {
+    if ((xDown - xUp) < -200) {
+      console.log('Swipe Left!')
+      currentPageNr = currentPageNr + 1
+      if (currentPageNr == options.displays[currentDisplayNr].pages.length) {
+        currentPageNr = 0
+      }
+      changeLayout(currentPageNr)
+    } else {
+      if ((yDown - yUp) > 200) {
+        console.log('Swipe Up!')
+        currentPageNr = null
+        display = null
+        changeLayout(-1)
+      } else {
+        console.log('Too small slide')
+      }
+    }
+  }
+}
+
+function changeLayout (nr) {
+  $("#display").fadeOut();
+  setTimeout(() => {
+    document.getElementById('display').innerHTML = ''
+    if (nr >= 0) {
+      setLayout(currentDisplayNr, currentPageNr)
+      menuMode = false
+    } else {
+      showMenuItems()
+    }
+  }, 500)
+  setTimeout(() => {
+    layoutLoaded = false
+  }, 1000)
+  setTimeout(() => {
+    $("#display").fadeIn();
+  }, 1500)
+}
+
+var timeoutIdTouch = 0
+var timeoutIdMouse = 0
+
+function holdDown () {
+  console.log('holdDown!')
+}
+
+$('#display').on('mousedown', function() {
+    xDown = event.pageX
+    yDown = event.pageY
+    console.log('Mouse down: %d-%d', xDown, yDown)
+    timeoutIdMouse = setTimeout(holdDown, 2000);
+}).on('mouseup mouseleave', function() {
+    clearTimeout(timeoutIdMouse);
+    console.log('Mouse up/leave: %d-%d', event.pageX, event.pageY)
+    swipe(event.pageX, event.pageY)
+});
+
+$('#display').on('touchstart', function() {
+    xDown = event.touches[0].pageX
+    yDown = event.touches[0].pageY
+    console.log('Touch touchstart: %d-%d', xDown, yDown)
+    timeoutIdTouch = setTimeout(holdDown, 2000);
+}).on('touchend', function() {
+    clearTimeout(timeoutIdTouch);
+    console.log('event: %s', JSON.stringify(event))
+    xUp = event.changedTouches[0].pageX
+    yUp = event.changedTouches[0].pageY
+    console.log('Touch touchleave: %d-%d', xUp, yUp)
+    swipe(xUp, yUp)
+});
+
+setTimeout(() => {
+  console.log('Fading in now!')
+  document.querySelector('#fadeScreen').style.opacity=1;
+}, 1000)
+
+readOptions()
+ReadUrlParams()
+
+</script>
