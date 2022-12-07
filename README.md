@@ -8,14 +8,13 @@ Slide left/right to switch pages or urlParam.
 Slide up to return to menu.
 Cycle through sources per box in edit mode (urlParam).
 
-"""
+```
 http://localhost:3000/signalk-instrument-display-plugin/?display=mobile&page=1&editMode=true
-"""
+```
 
 To do:
  - switch to a certain page depending on condition (sailing/motoring)
  - nicer way to do editting mode
  - load url in a box (css div)
 
-![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/master/doc/widescreen_animated.gif?raw=true)
-
+![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/main/doc/widescreen_animated.gif)
