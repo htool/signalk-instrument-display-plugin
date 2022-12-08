@@ -52,7 +52,8 @@ module.exports = function(app, options) {
             },
             url: {
               type: 'string',
-              title: 'URL to use for special types'
+              title: 'URL to use for e.g. url types'.
+              default: 'http://localhost:3000/@signalk/freeboard-sk/'
             }
           }
         }
