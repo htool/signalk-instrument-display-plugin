@@ -12,9 +12,15 @@ Cycle through sources per box in edit mode (urlParam).
 http://localhost:3000/signalk-instrument-display-plugin/?display=mobile&page=1&editMode=true
 ```
 
-To do:
+### URL
+You can load a URL in a box, e.g. Freeboard.
+
+### Swipe off
+`?swipe=off` as url parameter to disable swipes.
+
+
+### To do
  - switch to a certain page depending on condition (sailing/motoring)
  - nicer way to do editting mode
- - load url in a box (css div)
 
 ![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/main/doc/widescreen_animated.gif)

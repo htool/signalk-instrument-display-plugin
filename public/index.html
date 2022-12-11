@@ -67,6 +67,7 @@ var layoutLoaded = false
 
 var layout
 var display
+var swipe = true
 
 function toggleSettings () {
   settingsMode = !settingsMode
@@ -190,6 +191,9 @@ function ReadUrlParams () {
         currentPageNr = urlParams.get('page') - 1
       }
       console.log('page: ', currentPageNr)
+      if (urlParams.get('swipe') == 'off') {
+        swipe = false
+      }
 
       // Load layout
       setLayout(currentDisplayNr, currentPageNr)
@@ -588,19 +592,21 @@ $('#display').on('mousedown', function() {
     swipe(event.pageX, event.pageY)
 });
 
-$('#display').on('touchstart', function() {
-    xDown = event.touches[0].pageX
-    yDown = event.touches[0].pageY
-    console.log('Touch touchstart: %d-%d', xDown, yDown)
-    timeoutIdTouch = setTimeout(holdDown, 2000);
-}).on('touchend', function() {
-    clearTimeout(timeoutIdTouch);
-    console.log('event: %s', JSON.stringify(event))
-    xUp = event.changedTouches[0].pageX
-    yUp = event.changedTouches[0].pageY
-    console.log('Touch touchleave: %d-%d', xUp, yUp)
-    swipe(xUp, yUp)
-});
+if (swipe == true) {
+	$('#display').on('touchstart', function() {
+	    xDown = event.touches[0].pageX
+	    yDown = event.touches[0].pageY
+	    console.log('Touch touchstart: %d-%d', xDown, yDown)
+	    timeoutIdTouch = setTimeout(holdDown, 2000);
+	}).on('touchend', function() {
+	    clearTimeout(timeoutIdTouch);
+	    console.log('event: %s', JSON.stringify(event))
+	    xUp = event.changedTouches[0].pageX
+	    yUp = event.changedTouches[0].pageY
+	    console.log('Touch touchleave: %d-%d', xUp, yUp)
+	    swipe(xUp, yUp)
+	});
+}
 
 setTimeout(() => {
   console.log('Fading in now!')
