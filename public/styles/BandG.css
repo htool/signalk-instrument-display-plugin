@@ -29,6 +29,20 @@
   user-select: none; /* Standard syntax */
 }
 
+
+.settingsMode {
+  border: 2px solid darkgreen;
+}
+
+.url {
+  width: 100%;
+  height: 100%;
+}
+
+.inactive {
+  pointer-events: none;
+}
+
 .nightMode {
   color: red!important;
 }

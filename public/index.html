@@ -16,8 +16,6 @@
     -webkit-user-select: none; /* Safari */
     -ms-user-select: none; /* IE 10 and IE 11 */
     user-select: none; /* Standard syntax */
-    background: black;
-  }
   </style>
 </head>
 <body style="background: black;">
@@ -366,7 +364,7 @@ function setBox (nr, sourceNr) {
         '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
       break
     case 'url':
-      elementClasses = '<object type="text/html" data="' + boxObject.url + '" width="100%" height="100%"></object>'
+      elementClasses = '<div class="url" id="url"><object type="text/html" data="' + boxObject.url + '" width="100%" height="100%"></object></div>'
       break
   }
   var boxDoc = document.getElementById(box)
@@ -522,6 +520,10 @@ function drawBoxes () {
   document.getElementById('display').innerHTML = tmpDisplay;
 }
 
+function rad2degree (rad, precision = 2) {
+  return parseFloat(parseFloat(rad) * (180 / Math.PI).toFixed(precision));
+}
+
 function sleep(ms) {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -579,6 +581,23 @@ var timeoutIdMouse = 0
 
 function holdDown () {
   console.log('holdDown!')
+  settingsMode = !settingsMode
+  console.log('settingsMode changed to %s', settingsMode)
+  if (settingsMode == true) {
+    for (let i = 0; i<nrBoxes ; i++) {
+      document.getElementById('box_' + i).classList.add("settingsMode")
+    }
+    Array.from(document.getElementsByClassName('url')).forEach(function(el) {
+      el.classList.add("inactive")
+    })
+  } else {
+    for (let i = 0; i<nrBoxes ; i++) {
+      document.getElementById('box_' + i).classList.remove("settingsMode")
+    }
+    Array.from(document.getElementsByClassName('url')).forEach(function(el) {
+      el.classList.remove("inactive")
+    })
+  } 
 }
 
 $('#display').on('mousedown', function() {
