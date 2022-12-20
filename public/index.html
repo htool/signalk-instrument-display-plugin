@@ -67,7 +67,7 @@ var layoutLoaded = false
 
 var layout
 var display
-var swipe = true
+var swipeMode = true
 
 function toggleSettings () {
   settingsMode = !settingsMode
@@ -191,7 +191,7 @@ function ReadUrlParams () {
         currentPageNr = urlParams.get('page') - 1
       }
       console.log('page: ', currentPageNr)
-      if (urlParams.get('swipe') == 'off') {
+      if (urlParams.get('swipeMode') == 'off') {
         swipe = false
       }
 
@@ -592,7 +592,7 @@ $('#display').on('mousedown', function() {
     swipe(event.pageX, event.pageY)
 });
 
-if (swipe == true) {
+if (swipeMode == true) {
 	$('#display').on('touchstart', function() {
 	    xDown = event.touches[0].pageX
 	    yDown = event.touches[0].pageY
