@@ -26,5 +26,6 @@ You can load a URL in a box, e.g. Freeboard.
 ### To do
  - Switch to a certain page depending on condition (sailing/motoring)
  - Convert value based on unit (e.g. radian to degrees)
+ - Load layouts options from file list in public/layouts/
 
 ![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/main/doc/widescreen_animated.gif)
