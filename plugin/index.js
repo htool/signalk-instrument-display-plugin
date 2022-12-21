@@ -42,7 +42,7 @@ module.exports = function(app, options) {
             },
             unit: {
               type: 'string',
-              title: 'Unit',
+              title: 'Unit (e.g. kn, mBar, m/s, ℃, ℉, °M, °T)',
               default: 'kn'
             },
             decimals: {
@@ -53,7 +53,7 @@ module.exports = function(app, options) {
             url: {
               type: 'string',
               title: 'URL to use for e.g. url types',
-              default: 'http://localhost:3000/@signalk/freeboard-sk/'
+              default: ''
             }
           }
         }
@@ -127,7 +127,7 @@ module.exports = function(app, options) {
     function writeOptions (newoptions) {
       try {
         options = newoptions
-        restartPlugin(newoptions)
+        // restartPlugin(options)
       } catch (err) {
         console.error(err)
       }

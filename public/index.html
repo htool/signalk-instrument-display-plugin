@@ -57,10 +57,15 @@ var yTouchDown
 var options = {}
 
 var valuesObj = {}
+var units = {}
 var boxesObj
 var boxObjects = {} // Quick elements lookup by path
 
 var dayNight
+$.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
+  dayNight = data
+});
+
 var layoutLoaded = false
 
 var layout
@@ -209,8 +214,14 @@ function setLayout (currentDisplayNr, currentPageNr) {
 function startListeners () {
   var paths = [{"path": 'environment.mode'}]
   for (const value of Object.values(options.sources)) {
-    paths.push({"path": value.path})
+    var path = value.path.trim()
+    paths.push({"path": path})
+    $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
+      units[path] = data
+    })
   }
+
+  console.log('Units: %s',JSON.stringify(units))
 
   var subscriptionObject = {
     "context": "vessels.self",
@@ -440,8 +451,11 @@ function saveOptions () {
 
 
 function handleData (data) {
-  // console.log(JSON.stringify(data))
-  var path = data.updates[0].values[0].path
+  try {
+    var path = data.updates[0].values[0].path
+  } catch (e) {
+    console.log('Error handling update: %s', JSON.stringify(data))
+  }
 
   if (layoutLoaded == false) {
     var sourcesObject = options.displays[currentDisplayNr].pages[currentPageNr].sources
@@ -456,7 +470,8 @@ function handleData (data) {
     if (typeof box != 'undefined') {
 
 	    // console.log('handle_data box: ', box)
-	    var value = data.updates[0].values[0].value.toFixed(box.decimals)
+	    var value = toUnit(path, data.updates[0].values[0].value)
+      value = value.toFixed(box.decimals)
 	    var valueString = value
 	    if (box.decimals > 0) {
 	      valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
@@ -500,11 +515,30 @@ function handleData (data) {
   }
 }
 
+function toUnit (path, value) {
+  switch (units[path]) {
+    case 'ratio':
+      value = value * 100
+      break
+    case 'K':
+      value = value - 273.16
+      break
+    case 'Pa':
+      value = value / 100
+      break
+    case 'rad':
+      value = rad2degree(value)
+      break
+  }
+
+  return value
+}
+
 async function changeCSS(cssFile, id) {
   console.log('changeCSS: ', cssFile, id)
   document.getElementById(id).href=cssFile
   if (id == 'layout') {
-    await sleep(100)
+    await sleep(500)
     nrBoxes = getComputedStyle(document.body).getPropertyValue('--numberOfBoxes');
     console.log('numberOfBoxes: ', nrBoxes)
     drawBoxes()

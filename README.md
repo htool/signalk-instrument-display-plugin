@@ -10,22 +10,17 @@ E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen
  - Slide up to return to menu.
  - Long press on any box to enable/disable settingMode (or use url parameter &settingsMode=true)
  - Click on any box in settingsMode to cycle through sources
+ - Turn swiping off with `?swipe=off` as url parameter
+ - Load an url (like Freeboard) in a box
 
 Example:
 ```
 http://localhost:3000/signalk-instrument-display-plugin/?display=mobile&page=1&settingsMode=true
 ```
 
-### URL
-You can load a URL in a box, e.g. Freeboard.
-
-### Swipe off
-`?swipe=off` as url parameter to disable swipes.
-
-
 ### To do
  - Switch to a certain page depending on condition (sailing/motoring)
- - Convert value based on unit (e.g. radian to degrees)
  - Load layouts options from file list in public/layouts/
+ - Deal with values not updating
 
 ![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/main/doc/widescreen_animated.gif)
