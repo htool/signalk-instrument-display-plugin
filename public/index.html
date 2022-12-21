@@ -62,9 +62,25 @@ var boxesObj
 var boxObjects = {} // Quick elements lookup by path
 
 var dayNight
-$.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
-  dayNight = data
-});
+try {
+  $.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
+    dayNight = data
+  });
+} catch (e) {
+  console.log('dayNight error fetching, setting to day.')
+  dayNight = 'day'
+}
+
+var navState
+try {
+  $.getJSON('/signalk/v1/api/vessels/self/navigation/state/value', (data) => {
+    navState = data
+    console.log('navState: %s', navState)
+  });
+} catch (e) {
+  console.log('navState: error fetching, setting to null.')
+  navState = null
+}
 
 var layoutLoaded = false
 
@@ -186,16 +202,16 @@ function ReadUrlParams () {
       if (options.displays[nr].name == display) {
         currentDisplayNr = nr
         console.log('Set currentDisplayNr to %d (%s)', nr, display)
-      }
-      // page selection
-      if (urlParams.get('page') == null) {
-        currentPageNr = 0
-      } else {
-        currentPageNr = urlParams.get('page') - 1
-      }
-      console.log('page: ', currentPageNr)
-      if (urlParams.get('swipeMode') == 'off') {
-        swipe = false
+        // page selection
+        if (urlParams.get('page') == null) {
+          currentPageNr = 0
+        } else {
+          currentPageNr = urlParams.get('page') - 1
+        }
+        console.log('page: ', currentPageNr)
+        if (urlParams.get('swipeMode') == 'off') {
+          swipe = false
+        }
       }
 
       // Load layout
@@ -204,7 +220,6 @@ function ReadUrlParams () {
   }
 }
 
-
 function setLayout (currentDisplayNr, currentPageNr) {
   boxObjects = {}
   var newLayout = options.displays[currentDisplayNr].pages[currentPageNr].layout
@@ -212,10 +227,10 @@ function setLayout (currentDisplayNr, currentPageNr) {
 }
 
 function startListeners () {
-  var paths = [{"path": 'environment.mode'}]
+  var paths = [{'path': 'environment.mode'}, {'path': 'navigation.state'}]
   for (const value of Object.values(options.sources)) {
     var path = value.path.trim()
-    paths.push({"path": path})
+    paths.push({'path': path})
     $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
       units[path] = data
     })
@@ -328,7 +343,11 @@ function onClickBox (boxNr) {
 
 function onClickDisplay (nr) {
   currentDisplayNr = nr
-  currentPageNr = 0
+  if (navState != null) {
+    currentPageNr = pageMatchingNavState()
+  } else {
+    currentPageNr = 0
+  }
   console.log('onClickDisplay: currentDisplayNr: %d  currentPageNr: %d', currentDisplayNr, currentPageNr)
   layoutLoaded = false
   changeLayout(currentDisplayNr)
@@ -462,47 +481,13 @@ function handleData (data) {
     setBoxes()
   }
 
-  if (path != "environment.mode") {
-    // console.log('handle_data path: ', path)
-    // console.log('boxObjects: ', JSON.stringify(boxObjects))
-    if (typeof boxObjects[path] != 'undefined') {
-    boxObjects[path].forEach (box => {
-    if (typeof box != 'undefined') {
-
-	    // console.log('handle_data box: ', box)
-	    var value = toUnit(path, data.updates[0].values[0].value)
-      value = value.toFixed(box.decimals)
-	    var valueString = value
-	    if (box.decimals > 0) {
-	      valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
-	    }
-	    if (typeof box.displayType != "undefined" && box.layoutBoxNr != null) {
-	      // console.log("HandleData: path: %s  boxNr: %d  value: %s", path, box.layoutBoxNr, value)
-	      switch (box.displayType) {
-	        case "navigationArrow":
-	          var arrowColor = "green"
-	          var fontSize = 80
-	          if (value < 0) {
-	            arrowColor = "red"
-	          }
-	          if (Math.abs(value) >= 100) {
-	            fontSize = 60
-	          } 
-	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + value + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (value-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
-	          break
-	        case "number":
-	          // console.log('box: ', box)
-	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
-	          break
-	        default:
-	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
-	          break
-	      }
-	    }
-    }
-    })
-    }
-  } else {
+  if (path == 'navigation.state') {
+    navState = data.updates[0].values[0].value
+    console.log('navState changed to %s', navState)
+    // Find page that matches state and load if found
+    currentPage = pageMatchingNavState()
+    changeLayout(currentPageNr)
+  } else if (path == 'environment.mode') {
     dayNight = data.updates[0].values[0].value
     console.log('dayNight changed to %s', dayNight)
     if (dayNight == 'night') {
@@ -512,7 +497,57 @@ function handleData (data) {
       var docElement = document.body
       docElement.classList.remove("nightMode")
     } 
+  } else {
+    // console.log('handle_data path: ', path)
+    // console.log('boxObjects: ', JSON.stringify(boxObjects))
+    if (typeof boxObjects[path] != 'undefined') {
+      boxObjects[path].forEach (box => {
+        if (typeof box != 'undefined') {
+  
+  	      // console.log('handle_data box: ', box)
+    	    var value = toUnit(path, data.updates[0].values[0].value)
+          value = value.toFixed(box.decimals)
+    	    var valueString = value
+     	    if (box.decimals > 0) {
+    	      valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
+    	    }
+    	    if (typeof box.displayType != "undefined" && box.layoutBoxNr != null) {
+    	      // console.log("HandleData: path: %s  boxNr: %d  value: %s", path, box.layoutBoxNr, value)
+    	      switch (box.displayType) {
+    	        case "navigationArrow":
+    	          var arrowColor = "green"
+    	          var fontSize = 80
+    	          if (value < 0) {
+    	            arrowColor = "red"
+    	          }
+    	          if (Math.abs(value) >= 100) {
+    	            fontSize = 60
+    	          } 
+    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + value + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (value-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
+    	          break
+    	        case "number":
+     	          // console.log('box: ', box)
+    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+    	          break
+    	        default:
+    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+    	          break
+    	      }
+    	    }
+        }
+      })
+    }
   }
+}
+
+function pageMatchingNavState() {
+  for (const [pageNr, pageObj] of Object.entries(options.displays[currentDisplayNr].pages)) {
+    if (pageObj.context == navState) {
+      console.log('Found navState match: %s - returning pageNr %d', pageObj.context, pageNr)
+      return pageNr
+    }
+  }
+  return 0
 }
 
 function toUnit (path, value) {

@@ -12,6 +12,7 @@ E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen
  - Click on any box in settingsMode to cycle through sources
  - Turn swiping off with `?swipe=off` as url parameter
  - Load an url (like Freeboard) in a box
+ - Switch to a certain page depending on navigation.state (anchored, moored, sailing, motoring)
 
 Example:
 ```
@@ -19,8 +20,7 @@ http://localhost:3000/signalk-instrument-display-plugin/?display=mobile&page=1&s
 ```
 
 ### To do
- - Switch to a certain page depending on condition (sailing/motoring)
  - Load layouts options from file list in public/layouts/
- - Deal with values not updating
+ - Deal with stale updates
 
 ![screenshot](https://github.com/htool/signalk-instrument-display-plugin/blob/main/doc/widescreen_animated.gif)

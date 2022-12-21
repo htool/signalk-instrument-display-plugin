@@ -80,6 +80,11 @@ module.exports = function(app, options) {
 	                  title: 'Pages',
 	                  description: "Configure the layout(s) for the page(s) for your display."
 	                },
+                  context: {
+                    enum: ['anchored', 'moored', 'sailing', 'motoring'],
+                    title: 'Active on this navigation.state',
+                    descripting: 'You can make a page active depending on a navigation.state.'
+                  },
 	                sources: {
 	                  type: "array",
 	                  title: "Sources",
