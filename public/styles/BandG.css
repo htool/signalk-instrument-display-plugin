@@ -103,6 +103,7 @@
   width: 60%;
   height: 100%;
   font-size: 10rem;
+  pointer-events: none;
 }
 
 .navigationArrowArrow {
@@ -116,6 +117,7 @@
   font-size: 8rem;
   text-align: center;
   transition: all 0.4s ease;
+  pointer-events: none;
 }
 
 .key {
@@ -124,6 +126,7 @@
   left: 5%;
   display: inline;
   font-size: 3rem;
+  pointer-events: none;
 }
 
 .vhfChannel {
@@ -135,6 +138,7 @@
   font-size: 10rem;
   text-align: center;
   font-weight: bold;
+  pointer-events: none;
 }
 
 .vhfChannelName {
@@ -145,6 +149,7 @@
   display: inline-block;
   font-size: 4rem;
   text-align: left;
+  pointer-events: none;
 }
 
 .value {
@@ -157,6 +162,7 @@
   font-size: 10rem;
   text-align: center;
   font-weight: bold;
+  pointer-events: none;
 }
 
 .unit {
@@ -166,4 +172,5 @@
   display: inline;
   opacity: 0.6;
   font-size: 3rem;
+  pointer-events: none;
 }

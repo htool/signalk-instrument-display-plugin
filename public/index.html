@@ -286,26 +286,28 @@ function getSourceNrbyBoxNr (nr) {
   }
 }
 
-
-function onClickBox (boxNr) {
-  console.log('onClickBox for BoxNr %d', boxNr)
+function onClickBox (boxNr, direction) {
+  // console.log('onClickBox for BoxNr %s  direction: %s', boxNr, direction)
   if (settingsMode == true) {
 	  var sourceNr = getSourceNrbyBoxNr(boxNr)
 	  var sourcesLength = options.sources.length
-	  console.log('sourcesLength: %d', sourcesLength)
-	  if (sourceNr+1 > (sourcesLength-1)) {
-	    newSourceNr = -1
-	  } else {
-	    newSourceNr = sourceNr+1
+    newSourceNr = sourceNr + direction
+	  // console.log('sourcesLength: %d', sourcesLength)
+
+	  if (newSourceNr > (sourcesLength-1)) {
+	    newSourceNr = 0 
+	  }
+    if (newSourceNr < 0) {
+      newSourceNr = sourcesLength-1
 	  }
 	  if (sourceNr >= 0) {
 	    var currentPath = options.sources[sourceNr].path
-	    console.log('Onclick: new source %d for boxNr %d (currentPath: %s)', newSourceNr, boxNr, currentPath)
+	    // console.log('Onclick: new source %d for boxNr %d (currentPath: %s)', newSourceNr, boxNr, currentPath)
 	    options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr].source = newSourceNr
-	    console.log('Sources: %s', JSON.stringify(options.displays[currentDisplayNr].pages[currentPageNr].sources))
+	    // console.log('Sources: %s', JSON.stringify(options.displays[currentDisplayNr].pages[currentPageNr].sources))
 	    // Remove current entry
 	    if (typeof options.sources[sourceNr] != 'undefined') {
-	      console.log('options.sources[sourceNr]: ', JSON.stringify(options.sources[sourceNr]))
+	      // console.log('options.sources[sourceNr]: ', JSON.stringify(options.sources[sourceNr]))
 	      if (boxObjects[currentPath].length > 0) {
 	        newBoxObj = []
 	        boxObjects[currentPath].forEach (tmpBox => {
@@ -320,21 +322,21 @@ function onClickBox (boxNr) {
 	
 	  // Add new entry
 	  // console.log('onClick: options.sources: %s', JSON.stringify(options.sources))
-	  console.log('onClick: BEFORE boxObjects: %s', JSON.stringify(boxObjects))
+	  // console.log('onClick: BEFORE boxObjects: %s', JSON.stringify(boxObjects))
 	  var newSourceObj = {}
 	  if (newSourceNr == -1) {
 	    newSourceObj = {displayType: 'empty'}
 	  } else {
 	    newSourceObj = JSON.parse(JSON.stringify(options.sources[newSourceNr]))
 	  }
-	  console.log('onClick: new layoutBoxnr: %d  newSourceNr: %d  newSourceObj: %s', boxNr, newSourceNr, JSON.stringify(newSourceObj))
+	  // console.log('onClick: new layoutBoxnr: %d  newSourceNr: %d  newSourceObj: %s', boxNr, newSourceNr, JSON.stringify(newSourceObj))
 	  newSourceObj.layoutBoxNr = boxNr
 	  options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr] = newSourceNr
 	  if (typeof boxObjects[newSourceObj.path] == 'undefined') {
 	    boxObjects[newSourceObj.path] = []
 	  }
 	  boxObjects[newSourceObj.path].push(newSourceObj)
-	  console.log('onClick: AFTER boxObjects: %s', JSON.stringify(boxObjects))
+	  // console.log('onClick: AFTER boxObjects: %s', JSON.stringify(boxObjects))
 	  options.displays[currentDisplayNr].pages[currentPageNr].sources[boxNr] = {'source': newSourceNr}
 	  setBox(boxNr, newSourceNr)
 	  saveOptions()
@@ -350,7 +352,7 @@ function onClickDisplay (nr) {
   } else {
     currentPageNr = 0
   }
-  console.log('onClickDisplay: currentDisplayNr: %d  currentPageNr: %d', currentDisplayNr, currentPageNr)
+  // console.log('onClickDisplay: currentDisplayNr: %d  currentPageNr: %d', currentDisplayNr, currentPageNr)
   layoutLoaded = false
   changeLayout(currentDisplayNr)
   menuMode == false
@@ -361,7 +363,7 @@ function setBox (nr, sourceNr) {
   var box = "box_" + nr
   // console.log('box: %s sourceNr: %d', box, sourceNr)
   var boxObject = getBoxObjBySourceNr(sourceNr)
-  console.log('setBox: boxObject: %s', JSON.stringify(boxObject))
+  // console.log('setBox: boxObject: %s', JSON.stringify(boxObject))
 
   var elementClasses = ''
   try {
@@ -396,7 +398,11 @@ function setBox (nr, sourceNr) {
         '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
       break
     case 'url':
-      elementClasses = '<div class="url" id="url"><object type="text/html" data="' + boxObject.url + '" width="100%" height="100%"></object></div>'
+      if (settingsMode == true) {
+        elementClasses = '<div class="url inactive" id="url"><object type="text/html" data="' + boxObject.url + '" width="100%" height="100%"></object></div>'
+      } else {
+        elementClasses = '<div class="url" id="url"><object type="text/html" data="' + boxObject.url + '" width="100%" height="100%"></object></div>'
+      }
       break
   }
   var boxDoc = document.getElementById(box)
@@ -424,10 +430,10 @@ function setBox (nr, sourceNr) {
       if (typeof boxObjects[path] == 'undefined') {
         boxObjects[path] = []
       }
-      console.log('Adding boxObjects[%s]', path)
+      // console.log('Adding boxObjects[%s]', path)
       boxObjects[path].push(JSON.parse(JSON.stringify(options.sources[sourceNr])))
-      console.log('setBox: boxObjects: %s', JSON.stringify(boxObjects))
-      console.log('setBox: boxObjects[-1]: %s', JSON.stringify(boxObjects[path][boxObjects[path].length-1]))
+      // console.log('setBox: boxObjects: %s', JSON.stringify(boxObjects))
+      // console.log('setBox: boxObjects[-1]: %s', JSON.stringify(boxObjects[path][boxObjects[path].length-1]))
       boxObjects[path][boxObjects[path].length-1].layoutBoxNr = nr
     }
 
@@ -453,7 +459,7 @@ function setBox (nr, sourceNr) {
 }
 
 function saveOptions () {
-  console.log('saveOptions: options: %s', JSON.stringify(options))
+  // console.log('saveOptions: options: %s', JSON.stringify(options))
   $.ajax({
     type: "POST",
     url: "/plugins/signalk-instrument-display-plugin/saveOptions",
@@ -586,9 +592,20 @@ function drawBoxes () {
   console.log('Drawing %d boxes', nrBoxes)
   var tmpDisplay = ''
   for (let i=0; i<nrBoxes; i++) {
-    tmpDisplay = tmpDisplay + '<div class="box_' + i + '" id="box_' + i + '" onclick="onClickBox(' + i + ')"></div>'
+    tmpDisplay = tmpDisplay + '<div class="box box_' + i + '" id="box_' + i + '"></div>'
   }
   document.getElementById('display').innerHTML = tmpDisplay;
+  for (const box of document.getElementsByClassName('box')) {
+    box.addEventListener('click', function handleClick(event) {
+      var boxNr = parseInt(event.target.id.split('_')[1])
+      var rect = event.target.getBoundingClientRect();
+      var direction = 1
+      if ((event.clientX - rect.left) < (rect.width)/2) {
+        direction = -1
+      }
+      onClickBox(boxNr, direction)
+    });
+  }
 }
 
 function rad2degree (rad, precision = 2) {
@@ -601,7 +618,7 @@ function sleep(ms) {
 
 function swipe (xUp, yUp) {
   if ((xDown - xUp) > 200) {
-    console.log('Slide right!')
+    // console.log('Slide right!')
     currentPageNr = currentPageNr - 1
     if (currentPageNr < 0) {
       currentPageNr = options.displays[currentDisplayNr].pages.length - 1
@@ -609,7 +626,7 @@ function swipe (xUp, yUp) {
     changeLayout(currentPageNr)
   } else {
     if ((xDown - xUp) < -200) {
-      console.log('Swipe Left!')
+      // console.log('Swipe Left!')
       currentPageNr = currentPageNr + 1
       if (currentPageNr == options.displays[currentDisplayNr].pages.length) {
         currentPageNr = 0
@@ -617,12 +634,12 @@ function swipe (xUp, yUp) {
       changeLayout(currentPageNr)
     } else {
       if ((yDown - yUp) > 200) {
-        console.log('Swipe Up!')
+        // console.log('Swipe Up!')
         currentPageNr = null
         display = null
         changeLayout(-1)
       } else {
-        console.log('Too small slide')
+        // console.log('Too small slide')
       }
     }
   }
@@ -651,9 +668,9 @@ var timeoutIdTouch = 0
 var timeoutIdMouse = 0
 
 function holdDown () {
-  console.log('holdDown!')
+  // console.log('holdDown!')
   settingsMode = !settingsMode
-  console.log('settingsMode changed to %s', settingsMode)
+  // console.log('settingsMode changed to %s', settingsMode)
   if (settingsMode == true) {
     for (let i = 0; i<nrBoxes ; i++) {
       document.getElementById('box_' + i).classList.add("settingsMode")
@@ -674,11 +691,11 @@ function holdDown () {
 $('#display').on('mousedown', function() {
     xDown = event.pageX
     yDown = event.pageY
-    console.log('Mouse down: %d-%d', xDown, yDown)
+    // console.log('Mouse down: %d-%d', xDown, yDown)
     timeoutIdMouse = setTimeout(holdDown, 2000);
 }).on('mouseup mouseleave', function() {
     clearTimeout(timeoutIdMouse);
-    console.log('Mouse up/leave: %d-%d', event.pageX, event.pageY)
+    // console.log('Mouse up/leave: %d-%d', event.pageX, event.pageY)
     swipe(event.pageX, event.pageY)
 });
 
@@ -686,20 +703,20 @@ if (swipeMode == true) {
 	$('#display').on('touchstart', function() {
 	    xDown = event.touches[0].pageX
 	    yDown = event.touches[0].pageY
-	    console.log('Touch touchstart: %d-%d', xDown, yDown)
+	    // console.log('Touch touchstart: %d-%d', xDown, yDown)
 	    timeoutIdTouch = setTimeout(holdDown, 2000);
 	}).on('touchend', function() {
 	    clearTimeout(timeoutIdTouch);
-	    console.log('event: %s', JSON.stringify(event))
+	    // console.log('event: %s', JSON.stringify(event))
 	    xUp = event.changedTouches[0].pageX
 	    yUp = event.changedTouches[0].pageY
-	    console.log('Touch touchleave: %d-%d', xUp, yUp)
+	    // console.log('Touch touchleave: %d-%d', xUp, yUp)
 	    swipe(xUp, yUp)
 	});
 }
 
 setTimeout(() => {
-  console.log('Fading in now!')
+  // console.log('Fading in now!')
   document.querySelector('#fadeScreen').style.opacity=1;
 }, 1000)
 

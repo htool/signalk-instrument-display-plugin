@@ -9,7 +9,7 @@ E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen
  - Slide left/right to switch pages (or use url parameter &page=>nr>
  - Slide up to return to menu.
  - Long press on any box to enable/disable settingMode (or use url parameter &settingsMode=true)
- - Click on any box in settingsMode to cycle through sources
+ - Click left or right on any box in settingsMode to cycle through sources
  - Turn swiping off with `?swipe=off` as url parameter
  - Load an url (like Freeboard) in a box
  - Switch to a certain page depending on navigation.state (anchored, moored, sailing, motoring)
