@@ -229,11 +229,13 @@ function setLayout (currentDisplayNr, currentPageNr) {
 function startListeners () {
   var paths = [{'path': 'environment.mode'}, {'path': 'navigation.state'}]
   for (const value of Object.values(options.sources)) {
-    var path = value.path.trim()
-    paths.push({'path': path})
-    $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
-      units[path] = data
-    })
+    if (typeof value.path != 'undefined') {
+      var path = value.path.trim()
+      paths.push({'path': path})
+      $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
+        units[path] = data
+      })
+    }
   }
 
   console.log('Units: %s',JSON.stringify(units))
