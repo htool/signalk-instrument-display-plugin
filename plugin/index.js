@@ -132,6 +132,7 @@ module.exports = function(app, options) {
     function writeOptions (newoptions) {
       try {
         options = newoptions
+        app.savePluginOptions(options, () => {app.debug('Plugin options saved')});
         // restartPlugin(options)
       } catch (err) {
         console.error(err)
