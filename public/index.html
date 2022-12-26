@@ -65,6 +65,7 @@ var dayNight
 try {
   $.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
     dayNight = data
+    console.log('dayNight: %s', dayNight)
   });
 } catch (e) {
   console.log('dayNight error fetching, setting to day.')
@@ -224,6 +225,7 @@ function setLayout (currentDisplayNr, currentPageNr) {
   boxObjects = {}
   var newLayout = options.displays[currentDisplayNr].pages[currentPageNr].layout
   changeCSS("layouts/" + newLayout + ".css?ver=" + Math.floor(Math.random() * 1000), 'layout')
+  dayNightMode(dayNight)
 }
 
 function startListeners () {
@@ -457,9 +459,6 @@ function saveOptions () {
 function handleData (data) {
   try {
     var path = data.updates[0].values[0].path
-  } catch (e) {
-    console.log('Error handling update: %s', JSON.stringify(data))
-  }
 
   if (layoutLoaded == false) {
     var sourcesObject = options.displays[currentDisplayNr].pages[currentPageNr].sources
@@ -468,20 +467,14 @@ function handleData (data) {
 
   if (path == 'navigation.state') {
     navState = data.updates[0].values[0].value
-    console.log('navState changed to %s', navState)
+    console.log('navState set to %s', navState)
     // Find page that matches state and load if found
     currentPage = pageMatchingNavState()
     changeLayout(currentPageNr)
   } else if (path == 'environment.mode') {
     dayNight = data.updates[0].values[0].value
     console.log('dayNight changed to %s', dayNight)
-    if (dayNight == 'night') {
-      var docElement = document.body
-      docElement.classList.add("nightMode")
-    } else {
-      var docElement = document.body
-      docElement.classList.remove("nightMode")
-    } 
+    dayNightMode(dayNight)
   } else {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -548,6 +541,9 @@ function handleData (data) {
       })
     }
   }
+  } catch (e) {
+    console.log('Not handling update: %s', JSON.stringify(data))
+  }
 }
 
 function findLongestWord(str) {
@@ -569,6 +565,16 @@ function pageMatchingNavState() {
     }
   }
   return 0
+}
+
+function dayNightMode(dayNight) {
+  if (dayNight == 'night') {
+    var docElement = document.body
+    docElement.classList.add("nightMode")
+  } else {
+    var docElement = document.body
+    docElement.classList.remove("nightMode")
+  } 
 }
 
 function toUnit (path, value) {
