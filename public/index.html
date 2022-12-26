@@ -383,17 +383,10 @@ function setBox (nr, sourceNr) {
         '<div class="value"><div id="value_' + nr + '"/></div></div>' +
         '<div class="unit"><div id="unit_' + nr + '"/></div></div>'
       break
-    case 'vhfPOI':
+    case 'vhf':
       elementClasses =
         '<div class="key"><div id="key_' + nr + '"/></div></div>' +
-        '<div class="unit"><div id="unit_' + nr + '"/></div></div>' +
-        '<div class="vhfChannel"><div id="vhfChannel_' + nr + '"></div></div>' +
-        '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
-      break
-    case 'vhfSector':
-      elementClasses =
-        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
-        '<div class="unit"><div id="unit_' + nr + '"/></div></div>' +
+        '<div class="vhf"><div id="vhf_' + nr + '"/>VHF</div></div>' +
         '<div class="vhfChannel"><div id="vhfChannel_' + nr + '"></div></div>' +
         '<div class="vhfChannelName"><div id="vhfChannelName_' + nr + '"/></div></div>'
       break
@@ -435,22 +428,6 @@ function setBox (nr, sourceNr) {
       // console.log('setBox: boxObjects: %s', JSON.stringify(boxObjects))
       // console.log('setBox: boxObjects[-1]: %s', JSON.stringify(boxObjects[path][boxObjects[path].length-1]))
       boxObjects[path][boxObjects[path].length-1].layoutBoxNr = nr
-    }
-
-    // Temp placeholder
-    switch (boxObject.displayType) {
-    case 'vhfSector':
-    if (document.getElementById("vhfChannel_" + nr) != null) {
-      document.getElementById("vhfChannel_" + nr).innerHTML = "61"
-      document.getElementById("vhfChannelName_" + nr).innerHTML = "Haven IJmuiden"
-    }
-    break
-    case 'vhfPOI':
-    if (document.getElementById("vhfChannel_" + nr) != null) {
-      document.getElementById("vhfChannel_" + nr).innerHTML = "73"
-      document.getElementById("vhfChannelName_" + nr).innerHTML = "Seaport"
-    }
-    break
     }
   }
   } catch (reason) {
@@ -513,12 +490,14 @@ function handleData (data) {
         if (typeof box != 'undefined') {
   
   	      // console.log('handle_data box: ', box)
-    	    var value = toUnit(path, data.updates[0].values[0].value)
-          value = value.toFixed(box.decimals)
-    	    var valueString = value
-     	    if (box.decimals > 0) {
-    	      valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
-    	    }
+          if (box.displayType == 'number' || box.displayType == 'navigationArrow') {
+    	      var value = toUnit(path, data.updates[0].values[0].value)
+            value = value.toFixed(box.decimals)
+    	      var valueString = value
+     	      if (box.decimals > 0) {
+    	        valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
+    	      }
+          }
     	    if (typeof box.displayType != "undefined" && box.layoutBoxNr != null) {
     	      // console.log("HandleData: path: %s  boxNr: %d  value: %s", path, box.layoutBoxNr, value)
     	      switch (box.displayType) {
@@ -537,6 +516,29 @@ function handleData (data) {
      	          // console.log('box: ', box)
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
     	          break
+    	        case "vhf":
+                let vhf = JSON.parse(data.updates[0].values[0].value)
+     	            console.log('vhf: ', JSON.stringify(vhf))
+                  if (vhf.type.toLowerCase() == 'vts') {
+                    var key = 'VTS'
+                  } else {
+                    var key = vhf.type.toUpperCase()
+                  }
+                  if (vhf.distance > 0) {
+                    key = key + ' - ' + vhf.distance + 'm'
+                  } else {
+                    key = key + ' - INSIDE'
+                  }
+                  if (typeof vhf.callname != 'undefined') {
+                    var name = vhf.callname
+                  } else {
+                    var name = vhf.name
+                  }
+    	            document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
+                  var fontSize = 5 - (findLongestWord(vhf.name)/10)
+    	            document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
+    	            document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.vhfdata.generic.channel
+    	          break
     	        default:
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
     	          break
@@ -546,6 +548,17 @@ function handleData (data) {
       })
     }
   }
+}
+
+function findLongestWord(str) {
+  var strSplit = str.split(' ');
+  var longestWord = 0;
+  for(var i = 0; i < strSplit.length; i++){
+    if(strSplit[i].length > longestWord){
+	longestWord = strSplit[i].length;
+     }
+  }
+  return longestWord; // 6
 }
 
 function pageMatchingNavState() {

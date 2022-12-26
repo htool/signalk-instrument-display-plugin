@@ -13,6 +13,7 @@ E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen
  - Turn swiping off with `?swipe=off` as url parameter
  - Load an url (like Freeboard) in a box
  - Switch to a certain page depending on navigation.state (anchored, moored, sailing, motoring)
+ - Show [VHF info data](https://www.npmjs.com/package/vhfinfo)
 
 Example:
 ```

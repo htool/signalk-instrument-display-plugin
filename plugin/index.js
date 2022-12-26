@@ -25,14 +25,14 @@ module.exports = function(app, options) {
           type: "object",
           properties: {
             displayType: {
-              enum: ['number', 'navigationArrow', 'url'],
+              enum: ['number', 'navigationArrow', 'url', 'vhf'],
               title: 'Display type',
               description: 'Identifier for display type.',
               default: 'number'
             },
             key: {
               type: 'string',
-              title: 'Data key',
+              title: 'Data key. For vhf can be POI or VTS',
               default: 'SOG'
             },
             path: {
@@ -76,7 +76,7 @@ module.exports = function(app, options) {
               items: {
                 properties: {
                   layout: {
-	                  enum: ['2+1_2+1','2','4_2+1','4', '4_4','waveshare_3x2+1+1x2'],
+	                  enum: ['1', '2+1_2+1','2','4_2+1','4', '4_4','waveshare_3x2+1+1x2'],
 	                  title: 'Pages',
 	                  description: "Configure the layout(s) for the page(s) for your display."
 	                },
