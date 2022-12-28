@@ -412,11 +412,15 @@ function setBox (nr, sourceNr) {
   if (layoutLoaded == true) {
     var key = document.getElementById("key_" + nr)
     if (key != null) {
-      document.getElementById("key_" + nr).innerHTML = boxObject.key
+      if (typeof boxObject.key != 'undefined') {
+        document.getElementById("key_" + nr).innerHTML = boxObject.key
+      }
     }
     var unit = document.getElementById("unit_" + nr)
     if (unit != null) {
-      unit.innerHTML = boxObject.unit
+      if (typeof boxObject.unit != 'undefined') {
+        unit.innerHTML = boxObject.unit
+      }
     }
 
     // Setup lookup object
@@ -511,26 +515,26 @@ function handleData (data) {
     	          break
     	        case "vhf":
                 let vhf = JSON.parse(data.updates[0].values[0].value)
-     	            console.log('vhf: ', JSON.stringify(vhf))
-                  if (vhf.type.toLowerCase() == 'vts') {
-                    var key = 'VTS'
-                  } else {
-                    var key = vhf.type.toUpperCase()
-                  }
+     	            // console.log('vhf: ', JSON.stringify(vhf))
+                  var key = vhf.type.toUpperCase()
+                  if (key == "TERRITORIAL") { key = "TER" }
                   if (vhf.distance > 0) {
-                    key = key + ' - ' + vhf.distance + 'm'
+                    key = key + '  ' + vhf.distance + 'm'
                   } else {
-                    key = key + ' - INSIDE'
+                    key = key + '  INSIDE'
                   }
+
                   if (typeof vhf.callname != 'undefined') {
                     var name = vhf.callname
                   } else {
                     var name = vhf.name
                   }
-    	            document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
-                  var fontSize = 5 - (findLongestWord(vhf.name)/10)
-    	            document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
-    	            document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.vhfdata.generic.channel
+                  if (typeof box.key != 'undefined' || (box.key == vhf.type) {
+    	              document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
+                    var fontSize = 5 - (findLongestWord(vhf.name)/8)
+    	              document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
+    	              document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.vhfdata.generic.channel
+                  }
     	          break
     	        default:
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
