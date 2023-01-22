@@ -529,12 +529,10 @@ function handleData (data) {
                   } else {
                     var name = vhf.name
                   }
-                  if (typeof box.key != 'undefined' || (box.key == vhf.type) {
-    	              document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
-                    var fontSize = 5 - (findLongestWord(vhf.name)/8)
-    	              document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
-    	              document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.vhfdata.generic.channel
-                  }
+    	            document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
+                  var fontSize = 5 - (findLongestWord(vhf.name)/8)
+    	            document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
+    	            document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.channel
     	          break
     	        default:
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
