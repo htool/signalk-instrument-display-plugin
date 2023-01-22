@@ -520,7 +520,7 @@ function handleData (data) {
                   if (key == "TERRITORIAL") { key = "TER" }
                   if (vhf.distance > 0) {
                     key = key + '  ' + vhf.distance + 'm'
-                  } else {
+                  } else if (vhf.distance < 0) {
                     key = key + '  INSIDE'
                   }
 
