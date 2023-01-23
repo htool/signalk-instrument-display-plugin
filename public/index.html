@@ -225,7 +225,7 @@ function setLayout (currentDisplayNr, currentPageNr) {
 }
 
 function startListeners () {
-  var paths = [{'path': 'environment.mode'}, {'path': 'navigation.state'}]
+  var paths = [{'path': 'environment.mode'}, {'path': 'environment.displayMode'}, {'path': 'navigation.state'}]
   for (const value of Object.values(options.sources)) {
     if (typeof value.path != 'undefined') {
       var path = value.path.trim()
