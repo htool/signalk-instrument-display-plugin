@@ -38,10 +38,10 @@ $.ajaxSetup({
 const urlParams = new URLSearchParams(window.location.search);
 
 var connected = false
+var dataTimeout = 10000
 var reconnectTimer
 var instantReconnect = false
 var ws
-var wsNr = 0
 
 var nrBoxes = 0
 var menuMode = false
@@ -95,12 +95,9 @@ function toggleSettings () {
 }
 
 function connect () {
-  if (connected || wsNr >= 1) {
-    return
-  };
+  console.log("connect()")
   ws = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host + "/signalk/v1/stream?subscribe=none");
 	ws.onopen = function() {
-    wsNr++;
 	  connected = true;
     clearInterval(reconnectTimer)
     
@@ -126,8 +123,7 @@ function connect () {
 
 	  ws.onclose = function() {
 	    connected = false;
-      wsNr--;
-	    console.log("WebSocket closed - wsNr: " + wsNr);
+	    console.log("WebSocket closed")
       if (instantReconnect) {
         instantReconnect = false;
         connect();
@@ -459,8 +455,17 @@ function saveOptions () {
   });
 }
 
+function dataWatchdog () {
+  if (Date.now() - lastData > dataTimeout) {
+    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
+    ws.close()
+  } else {
+    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
+  }
+}
 
 function handleData (data) {
+  lastData = Date.now()
   try {
     var path = data.updates[0].values[0].path
 
@@ -740,6 +745,8 @@ setTimeout(() => {
   // console.log('Fading in now!')
   document.querySelector('#fadeScreen').style.opacity=1;
 }, 1000)
+
+setInterval (dataWatchdog, 5000)
 
 readOptions()
 ReadUrlParams()
