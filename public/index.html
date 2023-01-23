@@ -464,6 +464,13 @@ function dataWatchdog () {
   }
 }
 
+function setBacklightLevel () {
+  if (typeof backlightLevel != 'undefined') {
+    console.log('Changing backlight to: ' + backlightLevel)
+    document.getElementById("display").style.filter="brightness(" + (backlightLevel / 10) + ")";
+  }
+}
+
 function handleData (data) {
   lastData = Date.now()
   try {
@@ -484,6 +491,10 @@ function handleData (data) {
     dayNight = data.updates[0].values[0].value
     console.log('dayNight changed to %s', dayNight)
     dayNightMode(dayNight)
+  } else if (path == 'environment.displayMode') {
+    backlightLevel = data.updates[0].values[0].value.backlight
+    console.log('Backlight: ' + backlightLevel)
+    setBacklightLevel()
   } else {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -682,6 +693,7 @@ function changeLayout (nr) {
       showMenuItems()
     }
   }, 500)
+  setBacklightLevel()
   setTimeout(() => {
     layoutLoaded = false
   }, 1000)
