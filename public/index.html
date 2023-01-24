@@ -42,7 +42,7 @@ var dataTimeout = 10000
 var reconnectTimer
 var instantReconnect = false
 var ws
-
+var backlightLevel
 var nrBoxes = 0
 var menuMode = false
 var settingsMode = false
@@ -455,15 +455,6 @@ function saveOptions () {
   });
 }
 
-function dataWatchdog () {
-  if (Date.now() - lastData > dataTimeout) {
-    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
-    ws.close()
-  } else {
-    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
-  }
-}
-
 function setBacklightLevel () {
   if (typeof backlightLevel != 'undefined') {
     console.log('Changing backlight to: ' + backlightLevel)
@@ -475,6 +466,7 @@ function handleData (data) {
   lastData = Date.now()
   try {
     var path = data.updates[0].values[0].path
+    var value = data.updates[0].values[0].value
 
   if (layoutLoaded == false) {
     var sourcesObject = options.displays[currentDisplayNr].pages[currentPageNr].sources
@@ -482,19 +474,25 @@ function handleData (data) {
   }
 
   if (path == 'navigation.state') {
-    navState = data.updates[0].values[0].value
-    console.log('navState set to %s', navState)
-    // Find page that matches state and load if found
-    currentPage = pageMatchingNavState()
-    changeLayout(currentPageNr)
+    if (navState != value) {
+      navState = value
+      console.log('navState set to %s', navState)
+      // Find page that matches state and load if found
+      currentPage = pageMatchingNavState()
+      changeLayout(currentPageNr)
+    }
   } else if (path == 'environment.mode') {
-    dayNight = data.updates[0].values[0].value
-    console.log('dayNight changed to %s', dayNight)
-    dayNightMode(dayNight)
+    if (dayNight != value) {
+      dayNight = value
+      console.log('dayNight changed to %s', dayNight)
+      dayNightMode(dayNight)
+    }
   } else if (path == 'environment.displayMode') {
-    backlightLevel = data.updates[0].values[0].value.backlight
-    console.log('Backlight: ' + backlightLevel)
-    setBacklightLevel()
+    if (backlightLevel != value.backlight) {
+      backlightLevel = value.backlight
+      console.log('Backlight: ' + backlightLevel)
+      setBacklightLevel()
+    }
   } else {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -533,11 +531,11 @@ function handleData (data) {
                 let vhf = JSON.parse(data.updates[0].values[0].value)
      	            // console.log('vhf: ', JSON.stringify(vhf))
                   var key = vhf.type.toUpperCase()
-                  if (key == "TERRITORIAL") { key = "TER" }
+                  if (key == "TERRITORIAL") { key = "12Nm zone" }
                   if (vhf.distance > 0) {
-                    key = key + '  ' + vhf.distance + 'm'
+                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#8227; ' + key + ' (' + vhf.distance + 'm)'
                   } else if (vhf.distance < 0) {
-                    key = key + '  INSIDE'
+                    key = key + '  INSIDE  ' + vhf.vhfdata.generic.mode.toUpperCase()
                   }
 
                   if (typeof vhf.callname != 'undefined') {
@@ -561,6 +559,7 @@ function handleData (data) {
   }
   } catch (e) {
     console.log('Not handling update: %s', JSON.stringify(data))
+    console.log(e)
   }
 }
 
@@ -757,8 +756,6 @@ setTimeout(() => {
   // console.log('Fading in now!')
   document.querySelector('#fadeScreen').style.opacity=1;
 }, 1000)
-
-setInterval (dataWatchdog, 5000)
 
 readOptions()
 ReadUrlParams()
