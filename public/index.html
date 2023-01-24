@@ -533,7 +533,7 @@ function handleData (data) {
                   var key = vhf.type.toUpperCase()
                   if (key == "TERRITORIAL") { key = "12Nm zone" }
                   if (vhf.distance > 0) {
-                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#8227; ' + key + ' (' + vhf.distance + 'm)'
+                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#129170; ' + key + ' &#129168; ' + vhf.distance + 'm'
                   } else if (vhf.distance < 0) {
                     key = key + '  INSIDE  ' + vhf.vhfdata.generic.mode.toUpperCase()
                   }
