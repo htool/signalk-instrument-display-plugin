@@ -372,6 +372,12 @@ function setBox (nr, sourceNr) {
         '<div class="value"><div id="value_' + nr + '"/></div></div>' +
         '<div class="unit"><div id="unit_' + nr + '"/></div></div>'
       break
+    case 'string':
+      elementClasses =
+        '<div class="key"><div id="key_' + nr + '"/></div></div>' +
+        '<div class="value"><div id="value_' + nr + '"/></div></div>' +
+        '<div class="unit"><div id="unit_' + nr + '"/></div></div>'
+      break
     case 'navigationArrow':
       elementClasses =
         '<div class="key"><div id="key_' + nr + '"/></div></div>' +
@@ -452,10 +458,19 @@ function saveOptions () {
   });
 }
 
-function setBacklightLevel () {
-  if (typeof backlightLevel != 'undefined') {
-    console.log('Changing backlight to: ' + backlightLevel)
-    document.getElementById("display").style.filter="brightness(" + (backlightLevel / 10) + ")";
+function dataWatchdog () {
+  if (Date.now() - lastData > dataTimeout) {
+    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
+    ws.close()
+  } else {
+    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
+  }
+}
+
+function setBrightnessLevel () {
+  if (typeof brightnessLevel != 'undefined') {
+    console.log('Changing brightness to: ' + brightnessLevel)
+    document.getElementById("display").style.filter="brightness(" + (0.5+(brightnessLevel / 20)) + ")";
   }
 }
 
@@ -485,11 +500,8 @@ function handleData (data) {
       dayNightMode(dayNight)
     }
   } else if (path == 'environment.displayMode') {
-    if (backlightLevel != value.backlight) {
-      backlightLevel = value.backlight
-      console.log('Backlight: ' + backlightLevel)
-      setBacklightLevel()
-    }
+    brightnessLevel = data.updates[0].values[0].value.backlight
+    console.log('Brightness: ' + brightnessLevel)
   } else {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -498,9 +510,11 @@ function handleData (data) {
         if (typeof box != 'undefined') {
   
   	      // console.log('handle_data box: ', box)
-          if (box.displayType == 'number' || box.displayType == 'navigationArrow') {
+          if (box.displayType == 'number' || box.displayType == 'string' || box.displayType == 'navigationArrow') {
     	      var value = toUnit(path, data.updates[0].values[0].value)
-            value = value.toFixed(box.decimals)
+            if (typeof value == 'number') {
+              value = value.toFixed(box.decimals)
+            }
     	      var valueString = value
      	      if (box.decimals > 0) {
     	        valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
@@ -521,6 +535,10 @@ function handleData (data) {
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + value + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (value-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
     	          break
     	        case "number":
+     	          // console.log('box: ', box)
+    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+    	          break
+    	        case "string":
      	          // console.log('box: ', box)
     	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
     	          break
@@ -689,7 +707,7 @@ function changeLayout (nr) {
       showMenuItems()
     }
   }, 500)
-  setBacklightLevel()
+  // setBrightnessLevel()
   setTimeout(() => {
     layoutLoaded = false
   }, 1000)

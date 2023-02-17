@@ -25,7 +25,7 @@ module.exports = function(app, options) {
           type: "object",
           properties: {
             displayType: {
-              enum: ['number', 'navigationArrow', 'url', 'vhf'],
+              enum: ['number', 'string', 'navigationArrow', 'url', 'vhf'],
               title: 'Display type',
               description: 'Identifier for display type.',
               default: 'number'
