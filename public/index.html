@@ -37,10 +37,9 @@ $.ajaxSetup({
 
 const urlParams = new URLSearchParams(window.location.search);
 
-var connected = false
 var dataTimeout = 10000
+var lastData
 var reconnectTimer
-var instantReconnect = false
 var ws
 var backlightLevel
 var nrBoxes = 0
@@ -98,7 +97,6 @@ function connect () {
   console.log("connect()")
   ws = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host + "/signalk/v1/stream?subscribe=none");
 	ws.onopen = function() {
-	  connected = true;
     clearInterval(reconnectTimer)
     
     if (typeof options.displays == 'undefined') {
@@ -122,28 +120,27 @@ function connect () {
     }
 
 	  ws.onclose = function() {
-	    connected = false;
 	    console.log("WebSocket closed")
-      if (instantReconnect) {
-        instantReconnect = false;
-        connect();
-      } else {
-        reconnectTimer = setInterval(function() {
-          if (connected == false) {
-            connect();
-          } 
-        }, 1000);
-      }
 	  }
 
 	  ws.onerror = function(err) {
 	    console.log("WebSocket connection error: " + err.message + " - closing connection");
-      ws.close();
 	  }
     
   }
 }
 
+function dataWatchdog () {
+  if (Date.now() - lastData > dataTimeout) {
+    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
+    ws.close()
+    connect()
+  } else {
+    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
+  }
+}
+
+setInterval (dataWatchdog, 10000)
 // Connect websockets
 connect();
 
@@ -533,7 +530,7 @@ function handleData (data) {
                   var key = vhf.type.toUpperCase()
                   if (key == "TERRITORIAL") { key = "12Nm zone" }
                   if (vhf.distance > 0) {
-                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#129170; ' + key + ' &#129168; ' + vhf.distance + 'm'
+                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#8227; ' + key + ' &#8227; ' + vhf.distance + 'm'
                   } else if (vhf.distance < 0) {
                     key = key + '  INSIDE  ' + vhf.vhfdata.generic.mode.toUpperCase()
                   }
