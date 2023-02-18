@@ -502,7 +502,7 @@ function handleData (data) {
   } else if (path == 'environment.displayMode') {
     brightnessLevel = data.updates[0].values[0].value.backlight
     console.log('Brightness: ' + brightnessLevel)
-  } else {
+  } else if (value != null) {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
     if (typeof boxObjects[path] != 'undefined') {
