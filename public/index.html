@@ -513,7 +513,7 @@ function handleData (data) {
   
   	      // console.log('handle_data box: ', box)
           if (box.displayType == 'number' || box.displayType == 'string' || box.displayType == 'navigationArrow') {
-    	      var value = toUnit(path, data.updates[0].values[0].value)
+    	      var value = toUnit(path, data.updates[0].values[0].value, box.unit)
             if (typeof value == 'number') {
               value = value.toFixed(box.decimals)
             }
@@ -611,8 +611,14 @@ function dayNightMode(dayNight) {
   } 
 }
 
-function toUnit (path, value) {
+function toUnit (path, value, unit) {
+  // console.log('path: %s value: %s unit: %s', path, value, unit)
   switch (units[path]) {
+    case 'm/s':
+      if (unit == 'kn') {
+        value = value * 1.94384
+      }
+      break
     case 'ratio':
       value = value * 100
       break
