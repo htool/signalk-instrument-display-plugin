@@ -16,9 +16,36 @@
     -webkit-user-select: none; /* Safari */
     -ms-user-select: none; /* IE 10 and IE 11 */
     user-select: none; /* Standard syntax */
+  }
+  .connectionStatus {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    background: #8b0000;
+    color: #fff;
+    text-align: center;
+    padding: 0.4rem 0.8rem;
+    font-family: sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.04em;
+    pointer-events: none;
+  }
+  .connectionStatus.stale {
+    background: #8b5a00;
+  }
+  .nightMode .connectionStatus {
+    background: #4a0000;
+    color: #ffb3b3;
+  }
+  .nightMode .connectionStatus.stale {
+    background: #4a3000;
+  }
   </style>
 </head>
 <body style="background: black;">
+  <div id="connectionStatus" class="connectionStatus" hidden>Connecting…</div>
   <div class="fadeScreen" id="fadeScreen" style="touch-action: none;">
   <div class="display prevent-select" id="display"></div>
   </div>
@@ -30,17 +57,16 @@ const fadeScreen = document.querySelector('#fadeScreen');
 fadeScreen.style.opacity='0'
 fadeScreen.style.transition='opacity 0.5s';
 
-// Set the global configs to synchronous
-$.ajaxSetup({
-    async: false
-});
-
 const urlParams = new URLSearchParams(window.location.search);
 
 var dataTimeout = 10000
-var lastData
+var reconnectDelay = 1000
+var lastData = Date.now()
 var reconnectTimer
 var ws
+var wsGeneration = 0
+var subscribed = false
+var optionsRequestInFlight = false
 var backlightLevel
 var nrBoxes = 0
 var menuMode = false
@@ -60,27 +86,24 @@ var units = {}
 var boxesObj
 var boxObjects = {} // Quick elements lookup by path
 
-var dayNight
-try {
-  $.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
-    dayNight = data
-    console.log('dayNight: %s', dayNight)
-  });
-} catch (e) {
+var dayNight = 'day'
+$.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
+  dayNight = data
+  console.log('dayNight: %s', dayNight)
+  dayNightMode(dayNight)
+}).fail(function() {
   console.log('dayNight error fetching, setting to day.')
   dayNight = 'day'
-}
+})
 
-var navState
-try {
-  $.getJSON('/signalk/v1/api/vessels/self/navigation/state/value', (data) => {
-    navState = data
-    console.log('navState: %s', navState)
-  });
-} catch (e) {
+var navState = null
+$.getJSON('/signalk/v1/api/vessels/self/navigation/state/value', (data) => {
+  navState = data
+  console.log('navState: %s', navState)
+}).fail(function() {
   console.log('navState: error fetching, setting to null.')
   navState = null
-}
+})
 
 var layoutLoaded = false
 
@@ -93,55 +116,146 @@ function toggleSettings () {
   console.log('Settingsmode to ', settingsMode)
 }
 
+function setConnectionState (state) {
+  var el = document.getElementById('connectionStatus')
+  if (!el) {
+    return
+  }
+  if (state === 'connected') {
+    el.hidden = true
+    return
+  }
+  el.hidden = false
+  if (state === 'stale') {
+    el.textContent = 'No data — reconnecting…'
+    el.className = 'connectionStatus stale'
+  } else if (state === 'disconnected') {
+    el.textContent = 'Disconnected — retrying…'
+    el.className = 'connectionStatus'
+  } else {
+    el.textContent = 'Connecting…'
+    el.className = 'connectionStatus'
+  }
+}
+
+function scheduleReconnect () {
+  if (reconnectTimer) {
+    return
+  }
+  reconnectTimer = setTimeout(function () {
+    reconnectTimer = null
+    connect()
+  }, reconnectDelay)
+}
+
+function maybeStartListeners () {
+  if (subscribed) {
+    return
+  }
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    return
+  }
+  if (typeof options.displays == 'undefined') {
+    return
+  }
+  if (!startListeners()) {
+    return
+  }
+  subscribed = true
+}
+
 function connect () {
   console.log("connect()")
-  ws = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host + "/signalk/v1/stream?subscribe=none");
-	ws.onopen = function() {
-    clearInterval(reconnectTimer)
-    
-    if (typeof options.displays == 'undefined') {
-      readOptions();
-    } else {
-      console.log('Options: %s', JSON.stringify(options))
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
+    return
+  }
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+
+  var generation = ++wsGeneration
+  subscribed = false
+  setConnectionState('connecting')
+
+  var socket
+  try {
+    socket = new WebSocket((window.location.protocol === 'https:' ? 'wss' : 'ws') + "://" + window.location.host + "/signalk/v1/stream?subscribe=none");
+  } catch (err) {
+    console.log("WebSocket create error: " + err.message)
+    setConnectionState('disconnected')
+    scheduleReconnect()
+    return
+  }
+  ws = socket
+
+  socket.onopen = function() {
+    if (generation !== wsGeneration) {
+      return
     }
+    console.log("WebSocket open")
+    lastData = Date.now()
+    setConnectionState('connected')
+    maybeStartListeners()
+  }
 
-    // Start listening for value updates
-    startListeners();
-
-    ws.onmessage = function(event) {
-      if (event.data.includes('signalk-server')) {
-        welcomeMessage = event.data;
-        console.log("Skipping welcome message: " + welcomeMessage)
-      } else {
-        if (menuMode == false) {
+  socket.onmessage = function(event) {
+    if (generation !== wsGeneration) {
+      return
+    }
+    if (event.data.includes('signalk-server')) {
+      welcomeMessage = event.data;
+      console.log("Skipping welcome message: " + welcomeMessage)
+    } else {
+      lastData = Date.now()
+      if (menuMode == false) {
+        try {
           handleData(JSON.parse(event.data));
+        } catch (e) {
+          console.log('Failed to parse websocket message', e)
         }
       }
     }
+  }
 
-	  ws.onclose = function() {
-	    console.log("WebSocket closed")
-	  }
+  socket.onerror = function(err) {
+    if (generation !== wsGeneration) {
+      return
+    }
+    console.log("WebSocket connection error: " + (err.message || 'unknown') + " - closing connection");
+  }
 
-	  ws.onerror = function(err) {
-	    console.log("WebSocket connection error: " + err.message + " - closing connection");
-	  }
-    
+  socket.onclose = function() {
+    if (generation !== wsGeneration) {
+      return
+    }
+    console.log("WebSocket closed")
+    if (ws === socket) {
+      ws = null
+    }
+    setConnectionState('disconnected')
+    scheduleReconnect()
   }
 }
 
 function dataWatchdog () {
-  if (Date.now() - lastData > dataTimeout) {
-    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
+  if (Date.now() - lastData <= dataTimeout) {
+    return
+  }
+  if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
+    return
+  }
+  console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
+  setConnectionState('stale')
+  try {
     ws.close()
-    connect()
-  } else {
-    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
+  } catch (err) {
+    console.log("WebSocket close error: " + err.message)
+    scheduleReconnect()
   }
 }
 
 setInterval (dataWatchdog, 10000)
-// Connect websockets
 connect();
 
 function showMenuItems () {
@@ -167,14 +281,32 @@ function getBoxObjBySourceNr (nr) {
   }
 }
 
-function readOptions () {
-  $.getJSON("/plugins/signalk-instrument-display-plugin/options", function(result) {
-    console.log('Loaded options: ', JSON.stringify(result))
-    jQuery.extend(options, result)
-    changeCSS("styles/" + options.style + ".css?ver=" + Math.floor(Math.random() * 1000), 'style')
-  });
-  
-  console.log('options: ', options)
+function readOptions (cb) {
+  if (optionsRequestInFlight) {
+    return
+  }
+  optionsRequestInFlight = true
+  $.ajax({
+    url: "/plugins/signalk-instrument-display-plugin/options",
+    dataType: "json",
+    timeout: 5000,
+    success: function(result) {
+      optionsRequestInFlight = false
+      console.log('Loaded options: ', JSON.stringify(result))
+      jQuery.extend(options, result)
+      changeCSS("styles/" + options.style + ".css?ver=" + Math.floor(Math.random() * 1000), 'style')
+      console.log('options: ', options)
+      if (typeof cb === 'function') {
+        cb()
+      }
+      maybeStartListeners()
+    },
+    error: function() {
+      optionsRequestInFlight = false
+      console.log('Failed to load options, retrying in 1s')
+      setTimeout(function () { readOptions(cb) }, reconnectDelay)
+    }
+  })
 }
 
 function ReadUrlParams () {
@@ -223,13 +355,17 @@ function setLayout (currentDisplayNr, currentPageNr) {
 
 function startListeners () {
   var paths = [{'path': 'environment.mode'}, {'path': 'environment.displayMode'}, {'path': 'navigation.state'}]
-  for (const value of Object.values(options.sources)) {
-    if (typeof value.path != 'undefined') {
-      var path = value.path.trim()
-      paths.push({'path': path})
-      $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
-        units[path] = data
-      })
+  if (typeof options.sources != 'undefined') {
+    for (const value of Object.values(options.sources)) {
+      if (typeof value.path != 'undefined') {
+        var path = value.path.trim()
+        paths.push({'path': path})
+        if (typeof units[path] == 'undefined') {
+          $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
+            units[path] = data
+          })
+        }
+      }
     }
   }
 
@@ -244,7 +380,18 @@ function startListeners () {
 
   var subscriptionMessage = JSON.stringify(subscriptionObject);
   console.log("subscriptionMessage: " + subscriptionMessage);
-  ws.send(subscriptionMessage);
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    console.log('WebSocket not open, skipping subscribe')
+    return false
+  }
+  try {
+    ws.send(subscriptionMessage);
+    return true
+  } catch (err) {
+    console.log('Failed to send subscription: ' + err.message)
+    ws.close()
+    return false
+  }
 }
 
 function setBoxes () {
@@ -448,7 +595,6 @@ function saveOptions () {
     type: "POST",
     url: "/plugins/signalk-instrument-display-plugin/saveOptions",
     contentType: 'application/json',
-    async: false,
     data: JSON.stringify(options),
     dataType: 'json',
     success: function(data) {
@@ -458,15 +604,6 @@ function saveOptions () {
       console.log('saveOptions failed: ', errMsg);
     }
   });
-}
-
-function dataWatchdog () {
-  if (Date.now() - lastData > dataTimeout) {
-    console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
-    ws.close()
-  } else {
-    console.log("Last update was " + (Date.now() - lastData) + "ms ago")
-  }
 }
 
 function setBrightnessLevel () {
@@ -780,7 +917,6 @@ setTimeout(() => {
   document.querySelector('#fadeScreen').style.opacity=1;
 }, 1000)
 
-readOptions()
-ReadUrlParams()
+readOptions(ReadUrlParams)
 
 </script>
