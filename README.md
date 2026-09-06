@@ -1,5 +1,9 @@
 # Dislay B&G style instrument data on a wide screen
 
+## Lighting (showcase)
+
+This plugin is a *consumer* of vessel day/night and glass intent, not a lighting policy engine. See [AGENTS.md](AGENTS.md) and [signalk-n2k-displays](https://github.com/htool/signalk-n2k-displays) (`showcase/instrument-lighting`). Chrome follows `environment.mode`. Brightness filter will follow `electrical.displays.brightness` (0–1).
+
 Plugin for the instrument part, specifically to mimic brand look (B&G now, but relatively easy to adapt and configure (CSS) for others).
 Supports config with multiple displays and pages/layouts.
 E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen.
