@@ -41,7 +41,8 @@ var dataTimeout = 10000
 var lastData
 var reconnectTimer
 var ws
-var backlightLevel
+var brightnessLevel
+var intentBrightnessSeen = false
 var nrBoxes = 0
 var menuMode = false
 var settingsMode = false
@@ -69,6 +70,22 @@ try {
 } catch (e) {
   console.log('dayNight error fetching, setting to day.')
   dayNight = 'day'
+}
+
+try {
+  $.getJSON('/signalk/v1/api/vessels/self/electrical/displays/brightness/value', (data) => {
+    applyIntentBrightness(data)
+  })
+} catch (e) {
+  console.log('intent brightness: error fetching')
+}
+
+try {
+  $.getJSON('/signalk/v1/api/vessels/self/environment/displayMode/value', (data) => {
+    applyBlobBacklight(data)
+  })
+} catch (e) {
+  console.log('displayMode backlight: error fetching')
 }
 
 var navState
@@ -219,10 +236,11 @@ function setLayout (currentDisplayNr, currentPageNr) {
   var newLayout = options.displays[currentDisplayNr].pages[currentPageNr].layout
   changeCSS("layouts/" + newLayout + ".css?ver=" + Math.floor(Math.random() * 1000), 'layout')
   dayNightMode(dayNight)
+  setBrightnessLevel()
 }
 
 function startListeners () {
-  var paths = [{'path': 'environment.mode'}, {'path': 'environment.displayMode'}, {'path': 'navigation.state'}]
+  var paths = [{'path': 'environment.mode'}, {'path': 'electrical.displays.brightness'}, {'path': 'environment.displayMode'}, {'path': 'navigation.state'}]
   for (const value of Object.values(options.sources)) {
     if (typeof value.path != 'undefined') {
       var path = value.path.trim()
@@ -469,11 +487,41 @@ function dataWatchdog () {
   }
 }
 
-function setBrightnessLevel () {
-  if (typeof brightnessLevel != 'undefined') {
-    console.log('Changing brightness to: ' + brightnessLevel)
-    document.getElementById("display").style.filter="brightness(" + (0.5+(brightnessLevel / 20)) + ")";
+function applyIntentBrightness (value) {
+  var n = typeof value === 'string' ? Number(value) : value
+  if (typeof n !== 'number' || !isFinite(n)) {
+    return
   }
+  brightnessLevel = Math.min(1, Math.max(0, n))
+  intentBrightnessSeen = true
+  setBrightnessLevel()
+}
+
+function applyBlobBacklight (blob) {
+  if (intentBrightnessSeen) {
+    return
+  }
+  if (!blob || typeof blob.backlight === 'undefined') {
+    return
+  }
+  var n = typeof blob.backlight === 'string' ? Number(blob.backlight) : blob.backlight
+  if (typeof n !== 'number' || !isFinite(n)) {
+    return
+  }
+  brightnessLevel = Math.min(1, Math.max(0, n / 10))
+  setBrightnessLevel()
+}
+
+function setBrightnessLevel () {
+  if (typeof brightnessLevel == 'undefined') {
+    return
+  }
+  var el = document.getElementById('display')
+  if (!el) {
+    return
+  }
+  console.log('Changing brightness to: ' + brightnessLevel)
+  el.style.filter = 'brightness(' + brightnessLevel + ')'
 }
 
 function handleData (data) {
@@ -501,9 +549,10 @@ function handleData (data) {
       console.log('dayNight changed to %s', dayNight)
       dayNightMode(dayNight)
     }
+  } else if (path == 'electrical.displays.brightness') {
+    applyIntentBrightness(value)
   } else if (path == 'environment.displayMode') {
-    brightnessLevel = data.updates[0].values[0].value.backlight
-    console.log('Brightness: ' + brightnessLevel)
+    applyBlobBacklight(value)
   } else if (value != null) {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -714,8 +763,8 @@ function changeLayout (nr) {
     } else {
       showMenuItems()
     }
+    setBrightnessLevel()
   }, 500)
-  // setBrightnessLevel()
   setTimeout(() => {
     layoutLoaded = false
   }, 1000)

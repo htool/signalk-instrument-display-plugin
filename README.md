@@ -2,7 +2,7 @@
 
 ## Lighting (showcase)
 
-This plugin is a *consumer* of vessel day/night and glass intent, not a lighting policy engine. See [AGENTS.md](AGENTS.md) and [signalk-n2k-displays](https://github.com/htool/signalk-n2k-displays) (`showcase/instrument-lighting`). Chrome follows `environment.mode`. Brightness filter will follow `electrical.displays.brightness` (0–1).
+This plugin is a *consumer* of vessel day/night and glass brightness, not a lighting policy engine. See [AGENTS.md](AGENTS.md) and [signalk-n2k-displays](https://github.com/htool/signalk-n2k-displays) (`showcase/instrument-lighting`). Night chrome follows `environment.mode`. The CSS brightness filter follows `electrical.displays.brightness` (0–1), with a fallback to deprecated `environment.displayMode.backlight` (1–10) until that blob is unused.
 
 Plugin for the instrument part, specifically to mimic brand look (B&G now, but relatively easy to adapt and configure (CSS) for others).
 Supports config with multiple displays and pages/layouts.

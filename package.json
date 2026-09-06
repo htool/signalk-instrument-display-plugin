@@ -20,5 +20,8 @@
     "appIcon": "./signalk-logo.png",
     "displayName": "Instrument display"
   },
-  "homepage": "https://github.com/htool/signalk-instrument-display-plugin#readme"
+  "homepage": "https://github.com/htool/signalk-instrument-display-plugin#readme",
+  "scripts": {
+    "test": "node test/brightness.js"
+  }
 }
