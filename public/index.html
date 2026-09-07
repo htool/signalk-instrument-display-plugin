@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>SignalK instrument display</title>
   <script type='text/javascript' src='js/jquery.min.js'></script>
+  <script type='text/javascript' src='js/display-mode-control.js'></script>
   <link rel="stylesheet" id="layout" href="javascript:;">
   <link rel="stylesheet" id="style" href="javascript:;">
   <style>
@@ -42,10 +43,104 @@
   .nightMode .connectionStatus.stale {
     background: #4a3000;
   }
+  .lightingToggle {
+    position: fixed;
+    top: 0.6rem;
+    right: 0.6rem;
+    z-index: 10001;
+    width: 2.6rem;
+    height: 2.6rem;
+    border: 1px solid #00cc00;
+    background: rgba(0, 0, 0, 0.7);
+    color: #00cc00;
+    font-family: sans-serif;
+    font-size: 1.3rem;
+    line-height: 1;
+    border-radius: 0.3rem;
+    cursor: pointer;
+  }
+  .nightMode .lightingToggle {
+    border-color: #ff0000;
+    color: #ff0000;
+  }
+  .lightingPanel {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10000;
+    background: rgba(0, 0, 0, 0.88);
+    color: #00cc00;
+    font-family: sans-serif;
+    padding: 1rem 1.2rem 1.4rem;
+    border-top: 1px solid #00cc00;
+  }
+  .nightMode .lightingPanel {
+    color: #ff6666;
+    border-top-color: #ff0000;
+  }
+  .lightingTitle {
+    letter-spacing: 0.08em;
+    font-size: 0.95rem;
+    margin-bottom: 0.7rem;
+  }
+  .lightingModes {
+    display: flex;
+    gap: 0.6rem;
+    margin-bottom: 0.9rem;
+  }
+  .lightingModes button {
+    flex: 1;
+    min-height: 2.6rem;
+    border: 1px solid #00cc00;
+    background: transparent;
+    color: inherit;
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    cursor: pointer;
+  }
+  .nightMode .lightingModes button {
+    border-color: #ff0000;
+  }
+  .lightingModes button.active {
+    background: #00cc00;
+    color: #000;
+  }
+  .nightMode .lightingModes button.active {
+    background: #ff0000;
+    color: #000;
+  }
+  .lightingSliderRow {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .lightingSliderRow input[type="range"] {
+    flex: 1;
+    min-height: 2.2rem;
+  }
+  .lightingLevel {
+    min-width: 1.6rem;
+    text-align: right;
+    font-size: 1.3rem;
+  }
   </style>
 </head>
 <body style="background: black;">
   <div id="connectionStatus" class="connectionStatus" hidden>Connecting…</div>
+  <button type="button" id="lightingToggle" class="lightingToggle" aria-label="Display brightness">☀</button>
+  <div id="lightingPanel" class="lightingPanel" hidden>
+    <div class="lightingTitle">MFD DISPLAY</div>
+    <div class="lightingModes">
+      <button type="button" id="lightingDay" data-mode="day">DAY</button>
+      <button type="button" id="lightingNight" data-mode="night">NIGHT</button>
+    </div>
+    <div class="lightingSliderRow">
+      <span>BACKLIGHT</span>
+      <input type="range" id="lightingSlider" min="1" max="10" step="1" value="5">
+      <span id="lightingLevel" class="lightingLevel">5</span>
+    </div>
+  </div>
   <div class="fadeScreen" id="fadeScreen" style="touch-action: none;">
   <div class="display prevent-select" id="display"></div>
   </div>
@@ -67,7 +162,11 @@ var ws
 var wsGeneration = 0
 var subscribed = false
 var optionsRequestInFlight = false
-var backlightLevel
+var brightnessLevel
+var lightingPanelOpen = false
+var lightingUserAdjusting = false
+var lightingPutTimer
+var displayMode = { mode: 'day', backlight: 5 }
 var nrBoxes = 0
 var menuMode = false
 var settingsMode = false
@@ -94,6 +193,12 @@ $.getJSON('/signalk/v1/api/vessels/self/environment/mode/value', (data) => {
 }).fail(function() {
   console.log('dayNight error fetching, setting to day.')
   dayNight = 'day'
+})
+
+$.getJSON(DisplayModeControl.STATUS_URL, (data) => {
+  applyDisplayModeStatus(data)
+}).fail(function() {
+  console.log('displayMode: error fetching status')
 })
 
 var navState = null
@@ -609,8 +714,109 @@ function saveOptions () {
 function setBrightnessLevel () {
   if (typeof brightnessLevel != 'undefined') {
     console.log('Changing brightness to: ' + brightnessLevel)
-    document.getElementById("display").style.filter="brightness(" + (0.5+(brightnessLevel / 20)) + ")";
+    var displayEl = document.getElementById("display")
+    if (displayEl) {
+      displayEl.style.filter="brightness(" + (0.5+(brightnessLevel / 20)) + ")";
+    }
   }
+}
+
+function updateLightingPanel () {
+  var slider = document.getElementById('lightingSlider')
+  var level = document.getElementById('lightingLevel')
+  var dayBtn = document.getElementById('lightingDay')
+  var nightBtn = document.getElementById('lightingNight')
+  if (slider && !lightingUserAdjusting) {
+    slider.value = String(displayMode.backlight)
+  }
+  if (level) {
+    level.textContent = String(displayMode.backlight)
+  }
+  if (dayBtn) {
+    dayBtn.classList.toggle('active', displayMode.mode === 'day')
+  }
+  if (nightBtn) {
+    nightBtn.classList.toggle('active', displayMode.mode === 'night')
+  }
+}
+
+function setLightingPanelOpen (open) {
+  lightingPanelOpen = !!open
+  var panel = document.getElementById('lightingPanel')
+  if (panel) {
+    panel.hidden = !lightingPanelOpen
+  }
+}
+
+function toggleLightingPanel () {
+  setLightingPanelOpen(!lightingPanelOpen)
+}
+
+function applyDisplayModeStatus (value) {
+  var parsed = DisplayModeControl.parseStatus(value)
+  if (parsed.mode) {
+    displayMode.mode = parsed.mode
+  }
+  if (parsed.backlight != null) {
+    displayMode.backlight = parsed.backlight
+    brightnessLevel = parsed.backlight
+    setBrightnessLevel()
+  }
+  updateLightingPanel()
+}
+
+function sendDisplayModeControl (mode, backlight) {
+  var body = DisplayModeControl.buildPutBody(mode, backlight)
+  console.log('PUT ' + DisplayModeControl.CONTROL_PATH + ' ' + JSON.stringify(body))
+  $.ajax({
+    type: 'PUT',
+    url: DisplayModeControl.CONTROL_URL,
+    contentType: 'application/json',
+    data: JSON.stringify(body),
+    success: function() {
+      console.log('displayMode.control PUT ok')
+    },
+    error: function(xhr) {
+      console.log('displayMode.control PUT failed: ', xhr.status, xhr.responseText)
+    }
+  })
+}
+
+function scheduleDisplayModePut () {
+  clearTimeout(lightingPutTimer)
+  lightingPutTimer = setTimeout(function () {
+    sendDisplayModeControl(displayMode.mode, displayMode.backlight)
+  }, 200)
+}
+
+function onLightingModeClick (mode) {
+  var normalized = DisplayModeControl.normalizeMode(mode)
+  if (!normalized) {
+    return
+  }
+  displayMode.mode = normalized
+  updateLightingPanel()
+  sendDisplayModeControl(displayMode.mode, displayMode.backlight)
+}
+
+function onLightingSliderInput () {
+  var slider = document.getElementById('lightingSlider')
+  var backlight = DisplayModeControl.clampBacklight(slider && slider.value)
+  if (backlight == null) {
+    return
+  }
+  lightingUserAdjusting = true
+  displayMode.backlight = backlight
+  brightnessLevel = backlight
+  updateLightingPanel()
+  setBrightnessLevel()
+  scheduleDisplayModePut()
+}
+
+function onLightingSliderRelease () {
+  lightingUserAdjusting = false
+  clearTimeout(lightingPutTimer)
+  sendDisplayModeControl(displayMode.mode, displayMode.backlight)
 }
 
 function handleData (data) {
@@ -639,8 +845,10 @@ function handleData (data) {
       dayNightMode(dayNight)
     }
   } else if (path == 'environment.displayMode') {
-    brightnessLevel = data.updates[0].values[0].value.backlight
-    console.log('Brightness: ' + brightnessLevel)
+    if (!lightingUserAdjusting) {
+      applyDisplayModeStatus(value)
+    }
+    console.log('Brightness: ' + displayMode.backlight)
   } else if (value != null) {
     // console.log('handle_data path: ', path)
     // console.log('boxObjects: ', JSON.stringify(boxObjects))
@@ -834,6 +1042,8 @@ function swipe (xUp, yUp) {
         currentPageNr = null
         display = null
         changeLayout(-1)
+      } else if ((yDown - yUp) < -200) {
+        toggleLightingPanel()
       } else {
         // console.log('Too small slide')
       }
@@ -852,7 +1062,7 @@ function changeLayout (nr) {
       showMenuItems()
     }
   }, 500)
-  // setBrightnessLevel()
+  setBrightnessLevel()
   setTimeout(() => {
     layoutLoaded = false
   }, 1000)
@@ -875,6 +1085,7 @@ function holdDown () {
     Array.from(document.getElementsByClassName('url')).forEach(function(el) {
       el.classList.add("inactive")
     })
+    setLightingPanelOpen(true)
   } else {
     for (let i = 0; i<nrBoxes ; i++) {
       document.getElementById('box_' + i).classList.remove("settingsMode")
@@ -882,6 +1093,7 @@ function holdDown () {
     Array.from(document.getElementsByClassName('url')).forEach(function(el) {
       el.classList.remove("inactive")
     })
+    setLightingPanelOpen(false)
   } 
 }
 
@@ -918,5 +1130,25 @@ setTimeout(() => {
 }, 1000)
 
 readOptions(ReadUrlParams)
+
+document.getElementById('lightingToggle').addEventListener('click', function (event) {
+  event.stopPropagation()
+  toggleLightingPanel()
+})
+document.getElementById('lightingDay').addEventListener('click', function () {
+  onLightingModeClick('day')
+})
+document.getElementById('lightingNight').addEventListener('click', function () {
+  onLightingModeClick('night')
+})
+document.getElementById('lightingSlider').addEventListener('input', onLightingSliderInput)
+document.getElementById('lightingSlider').addEventListener('change', onLightingSliderRelease)
+document.getElementById('lightingPanel').addEventListener('mousedown', function (event) {
+  event.stopPropagation()
+})
+document.getElementById('lightingPanel').addEventListener('touchstart', function (event) {
+  event.stopPropagation()
+})
+updateLightingPanel()
 
 </script>
