@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <title>SignalK instrument display</title>
   <script type='text/javascript' src='js/jquery.min.js'></script>
+  <script type='text/javascript' src='vhf.js'></script>
   <link rel="stylesheet" id="layout" href="javascript:;">
   <link rel="stylesheet" id="style" href="javascript:;">
   <style>
@@ -59,6 +60,7 @@ var valuesObj = {}
 var units = {}
 var boxesObj
 var boxObjects = {} // Quick elements lookup by path
+var vhfCatalog = {}
 
 var dayNight
 try {
@@ -221,16 +223,121 @@ function setLayout (currentDisplayNr, currentPageNr) {
   dayNightMode(dayNight)
 }
 
+function cacheVhfCatalog (list) {
+  (list || []).forEach(function (item) {
+    if (item && item.id != null && item.id !== '') {
+      vhfCatalog[String(item.id)] = item
+    }
+  })
+}
+
+function refreshVhfCatalog () {
+  try {
+    $.getJSON('/signalk/v1/api/vhfinfo/nearby', function (list) {
+      cacheVhfCatalog(list)
+    })
+  } catch (e) {}
+}
+
+function fetchVhfRegion (id) {
+  if (!id || vhfCatalog[String(id)]) {
+    return
+  }
+  try {
+    $.getJSON('/signalk/v2/api/resources/regions/' + encodeURIComponent(id), function (region) {
+      vhfCatalog[String(id)] = region
+    })
+  } catch (e) {}
+}
+
+function resolveVhfValue (value, box) {
+  var parsed = vhfDisplay.parseVhfValue(value)
+  if (parsed.kind === 'empty') {
+    return null
+  }
+  if (parsed.kind === 'blob') {
+    if (parsed.vhf.id) {
+      vhfCatalog[String(parsed.vhf.id)] = parsed.vhf
+    }
+    return parsed.vhf
+  }
+  refreshVhfCatalog()
+  if (parsed.kind === 'compact') {
+    fetchVhfRegion(parsed.hit.id)
+    return vhfDisplay.hydrateCompact(parsed.hit, vhfCatalog)
+  }
+  var hydrated = parsed.hits.map(function (hit) {
+    if (vhfDisplay.parseVhfValue(hit).kind === 'blob') {
+      return hit
+    }
+    fetchVhfRegion(hit && hit.id)
+    return vhfDisplay.hydrateCompact(hit, vhfCatalog)
+  }).filter(Boolean)
+  cacheVhfCatalog(hydrated)
+  return vhfDisplay.pickFromList(hydrated, box)
+}
+
+function clearVhfBox (nr) {
+  var key = document.getElementById('key_' + nr)
+  var name = document.getElementById('vhfChannelName_' + nr)
+  var channel = document.getElementById('vhfChannel_' + nr)
+  if (key) { key.innerHTML = '' }
+  if (name) { name.innerHTML = '' }
+  if (channel) { channel.innerHTML = '' }
+}
+
+function renderVhfBox (nr, vhf) {
+  if (!vhf) {
+    clearVhfBox(nr)
+    return
+  }
+  var name = vhfDisplay.vhfDisplayName(vhf)
+  var longest = findLongestWord(name || vhf.name || '')
+  document.getElementById('key_' + nr).innerHTML = vhfDisplay.vhfKeyLabel(vhf)
+  document.getElementById('vhfChannelName_' + nr).innerHTML =
+    '<div style="font-size: ' + (5 - (longest / 8)) + 'rem;">' + name + '</div>'
+  document.getElementById('vhfChannel_' + nr).innerHTML = vhf.channel || ''
+}
+
+function applyVhfListToBoxes (value) {
+  if (!options.sources) {
+    return
+  }
+  options.sources.forEach(function (source) {
+    if (!source || source.displayType !== 'vhf' || !source.path) {
+      return
+    }
+    var boxes = boxObjects[source.path]
+    if (!boxes) {
+      return
+    }
+    boxes.forEach(function (box) {
+      if (box.layoutBoxNr == null) {
+        return
+      }
+      renderVhfBox(box.layoutBoxNr, resolveVhfValue(value, box))
+    })
+  })
+}
+
 function startListeners () {
   var paths = [{'path': 'environment.mode'}, {'path': 'environment.displayMode'}, {'path': 'navigation.state'}]
+  var hasVhf = false
   for (const value of Object.values(options.sources)) {
     if (typeof value.path != 'undefined') {
       var path = value.path.trim()
       paths.push({'path': path})
+      if (value.displayType === 'vhf') {
+        hasVhf = true
+      }
       $.getJSON('/signalk/v1/api/vessels/self/' + path.split('.').join('/') + '/meta/units', (data) => {
         units[path] = data
       })
     }
+  }
+  if (hasVhf) {
+    paths.push({'path': 'vhfinfo.nearby'})
+    refreshVhfCatalog()
   }
 
   console.log('Units: %s',JSON.stringify(units))
@@ -476,104 +583,98 @@ function setBrightnessLevel () {
   }
 }
 
-function handleData (data) {
-  lastData = Date.now()
-  try {
-    var path = data.updates[0].values[0].path
-    var value = data.updates[0].values[0].value
-
-  if (layoutLoaded == false) {
-    var sourcesObject = options.displays[currentDisplayNr].pages[currentPageNr].sources
-    setBoxes()
-  }
-
+function handlePathValue (path, value) {
   if (path == 'navigation.state') {
     if (navState != value) {
       navState = value
       console.log('navState set to %s', navState)
-      // Find page that matches state and load if found
       currentPage = pageMatchingNavState()
       changeLayout(currentPageNr)
     }
-  } else if (path == 'environment.mode') {
+    return
+  }
+  if (path == 'environment.mode') {
     if (dayNight != value) {
       dayNight = value
       console.log('dayNight changed to %s', dayNight)
       dayNightMode(dayNight)
     }
-  } else if (path == 'environment.displayMode') {
-    brightnessLevel = data.updates[0].values[0].value.backlight
-    console.log('Brightness: ' + brightnessLevel)
-  } else if (value != null) {
-    // console.log('handle_data path: ', path)
-    // console.log('boxObjects: ', JSON.stringify(boxObjects))
-    if (typeof boxObjects[path] != 'undefined') {
-      boxObjects[path].forEach (box => {
-        if (typeof box != 'undefined') {
-  
-  	      // console.log('handle_data box: ', box)
-          if (box.displayType == 'number' || box.displayType == 'string' || box.displayType == 'navigationArrow') {
-    	      var value = toUnit(path, data.updates[0].values[0].value, box.unit)
-            if (typeof value == 'number') {
-              value = value.toFixed(box.decimals)
-            }
-    	      var valueString = value
-     	      if (box.decimals > 0) {
-    	        valueString = value.split('.')[0] + "<span style='font-size: 60%;'>." + value.split('.')[1] + "</span>"
-    	      }
-          }
-    	    if (typeof box.displayType != "undefined" && box.layoutBoxNr != null) {
-    	      // console.log("HandleData: path: %s  boxNr: %d  value: %s", path, box.layoutBoxNr, value)
-    	      switch (box.displayType) {
-    	        case "navigationArrow":
-    	          var arrowColor = "green"
-    	          var fontSize = 80
-    	          if (value < 0) {
-    	            arrowColor = "red"
-    	          }
-    	          if (Math.abs(value) >= 100) {
-    	            fontSize = 60
-    	          } 
-    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + value + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (value-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
-    	          break
-    	        case "number":
-     	          // console.log('box: ', box)
-    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
-    	          break
-    	        case "string":
-     	          // console.log('box: ', box)
-    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
-    	          break
-    	        case "vhf":
-                let vhf = JSON.parse(data.updates[0].values[0].value)
-     	            // console.log('vhf: ', JSON.stringify(vhf))
-                  var key = vhf.type.toUpperCase()
-                  if (key == "TERRITORIAL") { key = "12Nm zone" }
-                  if (vhf.distance > 0) {
-                    key =  vhf.vhfdata.generic.mode.toUpperCase() + ' &#8227; ' + key + ' &#8227; ' + vhf.distance + 'm'
-                  } else if (vhf.distance < 0) {
-                    key = key + '  INSIDE  ' + vhf.vhfdata.generic.mode.toUpperCase()
-                  }
-
-                  if (typeof vhf.callname != 'undefined') {
-                    var name = vhf.callname
-                  } else {
-                    var name = vhf.name
-                  }
-    	            document.getElementById("key_" + box.layoutBoxNr).innerHTML = key
-                  var fontSize = 5 - (findLongestWord(vhf.name)/8)
-    	            document.getElementById("vhfChannelName_" + box.layoutBoxNr).innerHTML = '<div style="font-size: ' + fontSize + 'rem;">' + name + '</div>'
-    	            document.getElementById("vhfChannel_" + box.layoutBoxNr).innerHTML = vhf.channel
-    	          break
-    	        default:
-    	          document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
-    	          break
-    	      }
-    	    }
-        }
-      })
-    }
+    return
   }
+  if (path == 'environment.displayMode') {
+    if (value && typeof value.backlight != 'undefined') {
+      brightnessLevel = value.backlight
+      console.log('Brightness: ' + brightnessLevel)
+    }
+    return
+  }
+  if (path == 'vhfinfo.nearby') {
+    applyVhfListToBoxes(value)
+  }
+  if (typeof boxObjects[path] == 'undefined') {
+    return
+  }
+  boxObjects[path].forEach (box => {
+    if (typeof box == 'undefined' || box.layoutBoxNr == null) {
+      return
+    }
+    if (box.displayType == 'vhf') {
+      renderVhfBox(box.layoutBoxNr, resolveVhfValue(value, box))
+      return
+    }
+    if (value == null) {
+      return
+    }
+    var converted = value
+    var valueString = value
+    if (box.displayType == 'number' || box.displayType == 'string' || box.displayType == 'navigationArrow') {
+      converted = toUnit(path, value, box.unit)
+      if (typeof converted == 'number') {
+        converted = converted.toFixed(box.decimals)
+      }
+      valueString = converted
+      if (box.decimals > 0) {
+        valueString = converted.split('.')[0] + "<span style='font-size: 60%;'>." + converted.split('.')[1] + "</span>"
+      }
+    }
+    switch (box.displayType) {
+      case "navigationArrow":
+        var arrowColor = "green"
+        var fontSize = 80
+        if (converted < 0) {
+          arrowColor = "red"
+        }
+        if (Math.abs(converted) >= 100) {
+          fontSize = 60
+        }
+        document.getElementById("value_" + box.layoutBoxNr).innerHTML = '<div class="navigationArrowValue" style="font-size: ' + fontSize + '%">' + converted + '</div><div class="navigationArrowArrow" style="transform: rotateZ(' + (converted-90) + 'deg); color: ' + arrowColor + ';">&#10146;</div>'
+        break
+      case "number":
+        document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+        break
+      case "string":
+        document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+        break
+      default:
+        document.getElementById("value_" + box.layoutBoxNr).innerHTML = valueString
+        break
+    }
+  })
+}
+
+function handleData (data) {
+  lastData = Date.now()
+  try {
+    if (layoutLoaded == false) {
+      setBoxes()
+    }
+    var updates = data.updates || []
+    for (var u = 0; u < updates.length; u++) {
+      var values = (updates[u] && updates[u].values) || []
+      for (var i = 0; i < values.length; i++) {
+        handlePathValue(values[i].path, values[i].value)
+      }
+    }
   } catch (e) {
     console.log('Not handling update: %s', JSON.stringify(data))
     console.log(e)

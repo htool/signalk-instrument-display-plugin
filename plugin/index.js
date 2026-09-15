@@ -38,6 +38,7 @@ module.exports = function(app, options) {
             path: {
               type: 'string',
               title: 'Source path',
+              description: 'For vhf: vhfdata.nearest.vts (JSON blob) or vhfinfo.nearby (compact list).',
               default: 'navigation.speedOverGround'
             },
             unit: {
