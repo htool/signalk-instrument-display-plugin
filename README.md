@@ -13,7 +13,7 @@ E.g. you can make a config for mobile, ipad and waveshare like ultra wide screen
  - Turn swiping off with `?swipe=off` as url parameter
  - Load an url (like Freeboard) in a box
  - Switch to a certain page depending on navigation.state (anchored, moored, sailing, motoring)
- - Show [VHF info data](https://www.npmjs.com/package/vhfinfo)
+ - Show [VHF info data](https://www.npmjs.com/package/vhfinfo). Existing boxes on `vhfdata.nearest.vts` / `.lock` / numbered slots still work with the JSON blob. Compact `vhfinfo.nearby` (`{ id, distance, bearing }` in radians) is joined with `/signalk/v1/api/vhfinfo/nearby` (or a Region by id) for name and channel. Empty slots (`null`) clear the box.
 
 Example:
 ```
