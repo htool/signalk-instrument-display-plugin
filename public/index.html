@@ -61,11 +61,16 @@ fadeScreen.style.transition='opacity 0.5s';
 const urlParams = new URLSearchParams(window.location.search);
 
 var dataTimeout = 10000
-var reconnectDelay = 1000
+var reconnectDelayMin = 1000
+var reconnectDelayMax = 15000
+var reconnectDelay = reconnectDelayMin
+var connectingGraceMs = 5000
+var closingGraceMs = 2000
 var lastData = Date.now()
 var reconnectTimer
 var ws
 var wsGeneration = 0
+var wsStateChanged = Date.now()
 var subscribed = false
 var optionsRequestInFlight = false
 var backlightLevel
@@ -144,10 +149,46 @@ function scheduleReconnect () {
   if (reconnectTimer) {
     return
   }
+  var delay = reconnectDelay
   reconnectTimer = setTimeout(function () {
     reconnectTimer = null
     connect()
-  }, reconnectDelay)
+  }, delay)
+  reconnectDelay = Math.min(reconnectDelay * 2, reconnectDelayMax)
+}
+
+function abandonSocket (socket) {
+  if (!socket) {
+    return
+  }
+  socket.onopen = null
+  socket.onmessage = null
+  socket.onerror = null
+  socket.onclose = null
+  try {
+    socket.close()
+  } catch (err) {}
+}
+
+function hardReset (reason) {
+  console.log('WebSocket hardReset: ' + reason)
+  wsGeneration++
+  subscribed = false
+  wsStateChanged = Date.now()
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+  var socket = ws
+  ws = null
+  abandonSocket(socket)
+  setConnectionState('disconnected')
+  scheduleReconnect()
+}
+
+function noteLiveData () {
+  lastData = Date.now()
+  reconnectDelay = reconnectDelayMin
 }
 
 function maybeStartListeners () {
@@ -171,6 +212,10 @@ function connect () {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     return
   }
+  if (ws) {
+    abandonSocket(ws)
+    ws = null
+  }
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -178,6 +223,7 @@ function connect () {
 
   var generation = ++wsGeneration
   subscribed = false
+  wsStateChanged = Date.now()
   setConnectionState('connecting')
 
   var socket
@@ -196,7 +242,9 @@ function connect () {
       return
     }
     console.log("WebSocket open")
+    wsStateChanged = Date.now()
     lastData = Date.now()
+    reconnectDelay = reconnectDelayMin
     setConnectionState('connected')
     maybeStartListeners()
   }
@@ -209,7 +257,7 @@ function connect () {
       welcomeMessage = event.data;
       console.log("Skipping welcome message: " + welcomeMessage)
     } else {
-      lastData = Date.now()
+      noteLiveData()
       if (menuMode == false) {
         try {
           handleData(JSON.parse(event.data));
@@ -224,7 +272,8 @@ function connect () {
     if (generation !== wsGeneration) {
       return
     }
-    console.log("WebSocket connection error: " + (err.message || 'unknown') + " - closing connection");
+    console.log("WebSocket connection error: " + (err.message || 'unknown'))
+    hardReset('error')
   }
 
   socket.onclose = function() {
@@ -241,23 +290,35 @@ function connect () {
 }
 
 function dataWatchdog () {
-  if (Date.now() - lastData <= dataTimeout) {
+  var now = Date.now()
+  var state = ws ? ws.readyState : WebSocket.CLOSED
+
+  if (state === WebSocket.OPEN) {
+    if (now - lastData > dataTimeout) {
+      setConnectionState('stale')
+      hardReset('no data for ' + dataTimeout + 'ms')
+    }
     return
   }
-  if (!ws || (ws.readyState !== WebSocket.OPEN && ws.readyState !== WebSocket.CONNECTING)) {
+  if (state === WebSocket.CONNECTING) {
+    if (now - wsStateChanged > connectingGraceMs) {
+      hardReset('stuck CONNECTING')
+    }
     return
   }
-  console.log ("Data timeout (" + dataTimeout + "ms) reached. Restarting websocket.")
-  setConnectionState('stale')
-  try {
-    ws.close()
-  } catch (err) {
-    console.log("WebSocket close error: " + err.message)
+  if (state === WebSocket.CLOSING) {
+    if (now - wsStateChanged > closingGraceMs) {
+      hardReset('stuck CLOSING')
+    }
+    return
+  }
+  if (!reconnectTimer) {
+    setConnectionState('disconnected')
     scheduleReconnect()
   }
 }
 
-setInterval (dataWatchdog, 10000)
+setInterval(dataWatchdog, 1000)
 connect();
 
 function showMenuItems () {
@@ -480,9 +541,13 @@ function startListeners () {
 
   var subscriptionObject = {
     "context": "vessels.self",
-    "policy" : "ideal",
-    "minPeriod": 2000,
-    "subscribe": paths
+    "subscribe": paths.map(function (p) {
+      return {
+        path: p.path,
+        policy: 'fixed',
+        period: 2000
+      }
+    })
   }
 
   var subscriptionMessage = JSON.stringify(subscriptionObject);
@@ -496,7 +561,7 @@ function startListeners () {
     return true
   } catch (err) {
     console.log('Failed to send subscription: ' + err.message)
-    ws.close()
+    hardReset('subscribe failed')
     return false
   }
 }
